@@ -62,6 +62,9 @@ go build -o xugou-agent
 
 # 指定收集间隔（秒）
 ./xugou-agent start --interval 30
+
+# 指定http 代理
+./xugou-agent start --proxy http://proxy.example.com:8080
 ```
 
 #### 配置文件

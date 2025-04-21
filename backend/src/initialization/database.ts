@@ -22,7 +22,7 @@ export async function createTables(env: Bindings): Promise<void> {
   await env.DB.exec("CREATE TABLE IF NOT EXISTS monitor_status_history (id INTEGER PRIMARY KEY AUTOINCREMENT, monitor_id INTEGER NOT NULL, status TEXT NOT NULL, timestamp TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (monitor_id) REFERENCES monitors(id))");
 
   console.log('创建客户端表...');
-  await env.DB.exec("CREATE TABLE IF NOT EXISTS agents (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, token TEXT NOT NULL UNIQUE, created_by INTEGER NOT NULL, status TEXT DEFAULT 'inactive', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, hostname TEXT, ip_address TEXT, os TEXT, version TEXT, cpu_usage REAL, memory_total INTEGER, memory_used INTEGER, disk_total INTEGER, disk_used INTEGER, network_rx INTEGER, network_tx INTEGER, FOREIGN KEY (created_by) REFERENCES users(id))");
+  await env.DB.exec("CREATE TABLE IF NOT EXISTS agents (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, token TEXT NOT NULL UNIQUE, created_by INTEGER NOT NULL, status TEXT DEFAULT 'inactive', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, hostname TEXT, ip_addresses TEXT, os TEXT, version TEXT, cpu_usage REAL, memory_total INTEGER, memory_used INTEGER, disk_total INTEGER, disk_used INTEGER, network_rx INTEGER, network_tx INTEGER, FOREIGN KEY (created_by) REFERENCES users(id))");
 
   console.log('创建状态页配置表...');
   await env.DB.exec("CREATE TABLE IF NOT EXISTS status_page_config (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, title TEXT NOT NULL DEFAULT '系统状态', description TEXT DEFAULT '系统当前运行状态', logo_url TEXT DEFAULT '', custom_css TEXT DEFAULT '', created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id))");
@@ -166,7 +166,7 @@ export async function addSampleAgents(env: Bindings): Promise<void> {
     
     // 主服务器
     await env.DB.prepare(
-      `INSERT INTO agents (name, token, created_by, status, created_at, updated_at, cpu_usage, memory_total, memory_used, disk_total, disk_used, network_rx, network_tx, hostname, ip_address, os, version)
+      `INSERT INTO agents (name, token, created_by, status, created_at, updated_at, cpu_usage, memory_total, memory_used, disk_total, disk_used, network_rx, network_tx, hostname, ip_addresses, os, version)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       '主服务器',
@@ -183,14 +183,14 @@ export async function addSampleAgents(env: Bindings): Promise<void> {
       1024,   // 网络接收流量 (KB)
       512,    // 网络发送流量 (KB)
       'primary-server', // 主机名
-      '192.168.1.10',   // IP地址
+      '192.168.1.11',   // IP地址列表
       'Linux Ubuntu 20.04', // 操作系统
       '1.0.0'           // 版本
     ).run();
     
     // 备份服务器
     await env.DB.prepare(
-      `INSERT INTO agents (name, token, created_by, status, created_at, updated_at, cpu_usage, memory_total, memory_used, disk_total, disk_used, network_rx, network_tx, hostname, ip_address, os, version)
+      `INSERT INTO agents (name, token, created_by, status, created_at, updated_at, cpu_usage, memory_total, memory_used, disk_total, disk_used, network_rx, network_tx, hostname, ip_addresses, os, version)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       '备份服务器',
@@ -207,14 +207,14 @@ export async function addSampleAgents(env: Bindings): Promise<void> {
       512,     // 网络接收流量 (KB)
       256,     // 网络发送流量 (KB)
       'backup-server', // 主机名
-      '192.168.1.20',  // IP地址
+      '192.168.1.21',  // IP地址列表
       'Linux Debian 11', // 操作系统
       '1.0.0'           // 版本
     ).run();
     
     // 应用服务器
     await env.DB.prepare(
-      `INSERT INTO agents (name, token, created_by, status, created_at, updated_at, cpu_usage, memory_total, memory_used, disk_total, disk_used, network_rx, network_tx, hostname, ip_address, os, version)
+      `INSERT INTO agents (name, token, created_by, status, created_at, updated_at, cpu_usage, memory_total, memory_used, disk_total, disk_used, network_rx, network_tx, hostname, ip_addresses, os, version)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       '应用服务器',
@@ -231,7 +231,7 @@ export async function addSampleAgents(env: Bindings): Promise<void> {
       2048,   // 网络接收流量 (KB)
       1024,   // 网络发送流量 (KB)
       'app-server',    // 主机名
-      '192.168.1.30',  // IP地址
+      '192.168.1.31',  // IP地址列表
       'Linux CentOS 7', // 操作系统
       '1.0.0'           // 版本
     ).run();
@@ -273,7 +273,7 @@ export async function createNotificationTemplates(env: Bindings): Promise<void> 
       'Agent监控模板',
       'default',
       '【${status}】${name} 客户端状态变更',
-      '🔔 客户端状态变更通知\n\n📊 主机: ${name}\n🔄 状态: ${status} (之前: ${previous_status})\n🕒 时间: ${time}\n\n🖥️ 主机信息:\n  主机名: ${hostname}\n  IP地址: ${ip_address}\n  操作系统: ${os}\n\n❗ 错误信息: ${error}',
+      '🔔 客户端状态变更通知\n\n📊 主机: ${name}\n🔄 状态: ${status} (之前: ${previous_status})\n🕒 时间: ${time}\n\n🖥️ 主机信息:\n  主机名: ${hostname}\n  IP地址: ${ip_addresses}\n  操作系统: ${os}\n\n❗ 错误信息: ${error}',
       1, // is_default=1
       userId,
       now,

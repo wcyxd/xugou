@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Bindings } from '../models/db';
 import { Monitor } from '../models/monitor';
-import * as monitorDb from '../db/monitor';
+import { cleanupOldRecords, getMonitorsToCheck, checkSingleMonitor as monitorServiceCheck } from '../services';
 import { shouldSendNotification, sendNotification } from '../utils/notification';
 
 const monitorTask = new Hono<{ Bindings: Bindings }>();
@@ -12,13 +12,13 @@ async function checkMonitors(c: any) {
     console.log('开始执行监控检查...');
     
     // 清理30天以前的历史记录
-    await monitorDb.cleanupOldRecords(c.env.DB);
+    await cleanupOldRecords(c.env.DB);
     
     // 获取当前时间
     const now = new Date();
     
     // 查询需要检查的监控
-    const monitors = await monitorDb.getMonitorsToCheck(c.env.DB);
+    const monitors = await getMonitorsToCheck(c.env.DB);
     
     console.log(`找到 ${monitors?.results?.length || 0} 个需要检查的监控`);
     
@@ -52,8 +52,8 @@ async function checkMonitors(c: any) {
 
 // 检查单个监控的函数
 async function checkSingleMonitor(c: any, monitor: Monitor) {
-  // 使用抽象出来的通用检查监控函数
-  return await monitorDb.checkSingleMonitor(c.env.DB, monitor);
+  // 使用服务层的检查函数
+  return await monitorServiceCheck(c.env.DB, monitor);
 }
 
 // 处理监控通知

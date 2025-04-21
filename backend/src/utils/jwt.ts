@@ -10,8 +10,23 @@
  * @returns JWT密钥
  */
 export const getJwtSecret = (c: any): string => {
-  const { id: versionId, tag: versionTag, timestamp: versionTimestamp } = c.env.CF_VERSION_METADATA;
-  return versionId || 'your-secret-key-change-in-production';
+  
+  // 检查是否直接包含 CF_VERSION_METADATA
+  if (c.CF_VERSION_METADATA) {
+    const { id: versionId } = c.CF_VERSION_METADATA;
+    return versionId || 'your-secret-key-change-in-production';
+  }
+  
+  // 检查是否在 env 属性下包含 CF_VERSION_METADATA
+  if (c.env && c.env.CF_VERSION_METADATA) {
+    console.log('context.env 包含 CF_VERSION_METADATA');
+    const { id: versionId } = c.env.CF_VERSION_METADATA;
+    console.log('解析出的 versionId:', versionId);
+    return versionId || 'your-secret-key-change-in-production';
+  }
+  
+  console.error('错误: 未找到 CF_VERSION_METADATA');
+  return 'your-secret-key-change-in-production';
 };
 
 /**

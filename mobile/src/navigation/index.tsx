@@ -4,13 +4,12 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
 import { StatusBar } from 'expo-status-bar';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { ActivityIndicator, View, Text, StyleSheet, TouchableOpacity, Animated, TextInput } from 'react-native';
+import { ActivityIndicator, View, Platform, Text, Animated, Easing } from 'react-native';
 import { useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { navigationRef } from './navigationUtils';
-import { API_BASE_URL, saveApiBaseUrl } from '../config/api';
+import ApiUrlSettings from '../components/ApiUrlSettings';
 
 // Screens - 只引用已实现的屏幕
 import DashboardScreen from '../screens/dashboard/DashboardScreen';
@@ -20,7 +19,6 @@ import CreateMonitorScreen from '../screens/monitors/CreateMonitorScreen';
 import AgentsScreen from '../screens/agents/AgentsScreen';
 import AgentDetailScreen from '../screens/agents/AgentDetailScreen';
 import CreateAgentScreen from '../screens/agents/CreateAgentScreen';
-import StatusScreen from '../screens/status/StatusScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import ProfileScreen from '../screens/settings/ProfileScreen';
 import MonitorNotificationsScreen from '../screens/settings/MonitorNotificationsScreen';
@@ -36,25 +34,26 @@ import { useAuthStore } from '../store/authStore';
 const MonitorsStack = createNativeStackNavigator();
 const MonitorsNavigator = () => {
   const { t } = useTranslation();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
   
   return (
-    <MonitorsStack.Navigator>
+    <MonitorsStack.Navigator
+      screenOptions={{
+        headerShown: false
+      }}
+    >
       <MonitorsStack.Screen
         name="MonitorsList"
         component={MonitorsScreen}
-        options={{ title: t('navigation.monitors', '监控') }}
       />
       <MonitorsStack.Screen
         name="MonitorDetail"
         component={MonitorDetailScreen}
-        options={({ route }: any) => ({ 
-          title: route.params?.name || t('monitors.detail', '监控详情') 
-        })}
       />
       <MonitorsStack.Screen
         name="CreateMonitor"
         component={CreateMonitorScreen}
-        options={{ title: t('monitors.addMonitor', '添加监控') }}
       />
     </MonitorsStack.Navigator>
   );
@@ -64,27 +63,105 @@ const MonitorsNavigator = () => {
 const AgentsStack = createNativeStackNavigator();
 const AgentsNavigator = () => {
   const { t } = useTranslation();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
   
   return (
-    <AgentsStack.Navigator>
+    <AgentsStack.Navigator
+      screenOptions={{
+        headerShown: false
+      }}
+    >
       <AgentsStack.Screen
         name="AgentsList"
         component={AgentsScreen}
-        options={{ title: t('navigation.agents', '客户端') }}
       />
       <AgentsStack.Screen
         name="AgentDetail"
         component={AgentDetailScreen}
-        options={({ route }: any) => ({ 
-          title: route.params?.name || t('agents.detail', '客户端详情') 
-        })}
       />
       <AgentsStack.Screen
         name="CreateAgent"
         component={CreateAgentScreen}
-        options={{ title: t('agents.addAgent', '添加客户端') }}
       />
     </AgentsStack.Navigator>
+  );
+};
+
+// 定义TabIcon组件的Props类型
+interface TabIconProps {
+  name: keyof typeof Ionicons.glyphMap;
+  color: string;
+  size?: number;
+  focused: boolean;
+}
+
+// TabIcon组件 - 带动画效果的图标
+const TabIcon: React.FC<TabIconProps> = ({ name, color, size, focused }) => {
+  // 创建动画值
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  
+  // 当focused状态变化时触发动画
+  useEffect(() => {
+    if (focused) {
+      // 放大并轻微旋转动画
+      Animated.parallel([
+        Animated.timing(scaleAnim, {
+          toValue: 1.2,
+          duration: 200,
+          useNativeDriver: true,
+          easing: Easing.bounce
+        }),
+        Animated.timing(rotateAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+          easing: Easing.elastic(1)
+        })
+      ]).start();
+    } else {
+      // 恢复原始大小
+      Animated.parallel([
+        Animated.timing(scaleAnim, {
+          toValue: 1,
+          duration: 150,
+          useNativeDriver: true
+        }),
+        Animated.timing(rotateAnim, {
+          toValue: 0,
+          duration: 150,
+          useNativeDriver: true
+        })
+      ]).start();
+    }
+  }, [focused, scaleAnim, rotateAnim]);
+  
+  // 计算旋转角度
+  const rotate = rotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '5deg']
+  });
+
+  // 处理图标名称
+  const iconName = focused ? name : `${name}-outline` as keyof typeof Ionicons.glyphMap;
+  
+  return (
+    <View style={{ 
+      alignItems: 'center', 
+      justifyContent: 'center', 
+      width: 50, 
+      height: 30,
+    }}>
+      <Animated.View style={{ 
+        transform: [
+          { scale: scaleAnim },
+          { rotate: rotate }
+        ]
+      }}>
+        <Ionicons name={iconName} size={size || 24} color={color} />
+      </Animated.View>
+    </View>
   );
 };
 
@@ -92,21 +169,23 @@ const AgentsNavigator = () => {
 const MainTab = createBottomTabNavigator();
 const MainTabNavigator = () => {
   const { t } = useTranslation();
+  const colorScheme = useColorScheme();
   
+  const isDark = colorScheme === 'dark';
+  
+  // 优化底部标签栏样式
   const tabBarStyle = {
-    height: 75,
-    position: 'absolute' as const,
-    bottom: 25,
-    left: 20,
-    right: 20,
-    borderRadius: 28,
-    paddingTop: 5,
-    paddingBottom: 10,
-    paddingHorizontal: 5,
-    backgroundColor: '#ffffff',
-    boxShadow: '0px 5px 15px rgba(0, 0, 0, 0.08)',
-    elevation: 10,
-    borderTopWidth: 0
+    height: 64,
+    backgroundColor: isDark ? '#1c1c1e' : '#ffffff',
+    borderTopWidth: 1,
+    borderTopColor: isDark ? '#2c2c2e' : '#f0f0f0',
+    paddingBottom: Platform.OS === 'ios' ? 20 : 10,
+    paddingTop: 10,
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4
   };
   
   return (
@@ -114,24 +193,18 @@ const MainTabNavigator = () => {
       initialRouteName="Dashboard"
       screenOptions={{
         tabBarShowLabel: true,
-        headerShown: true,
+        headerShown: false,
         tabBarStyle: tabBarStyle,
         tabBarActiveTintColor: '#0066cc',
-        tabBarInactiveTintColor: '#8e8e93',
+        tabBarInactiveTintColor: isDark ? '#8e8e93' : '#8e8e93',
         tabBarIconStyle: {
-          marginTop: 5
+          marginTop: 0
         },
         tabBarLabelStyle: {
-          fontSize: 10,
+          fontSize: 11,
           fontWeight: '500',
-          marginTop: 2,
-          marginBottom: 3,
-          textAlign: 'center'
-        },
-        tabBarItemStyle: {
-          flex: 1,
-          paddingHorizontal: 0,
-          minWidth: 60
+          marginBottom: 0,
+          marginTop: 2
         }
       }}
     >
@@ -139,10 +212,9 @@ const MainTabNavigator = () => {
         name="Dashboard"
         component={DashboardScreen}
         options={{
-          title: t('navigation.dashboard', '仪表盘'),
           tabBarLabel: t('navigation.dashboard', '仪表盘'),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="grid" size={22} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <TabIcon name={"grid" as keyof typeof Ionicons.glyphMap} color={color} size={size} focused={focused} />
           ),
         }}
       />
@@ -150,11 +222,9 @@ const MainTabNavigator = () => {
         name="Monitors"
         component={MonitorsNavigator}
         options={{
-          title: t('navigation.monitors', '监控'),
           tabBarLabel: t('navigation.monitors', '监控'),
-          headerShown: false,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="pulse-outline" size={22} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <TabIcon name={"pulse" as keyof typeof Ionicons.glyphMap} color={color} size={size} focused={focused} />
           ),
         }}
       />
@@ -162,11 +232,9 @@ const MainTabNavigator = () => {
         name="Agents"
         component={AgentsNavigator}
         options={{
-          title: t('navigation.agents', '客户端'),
           tabBarLabel: t('navigation.agents', '客户端'),
-          headerShown: false,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="hardware-chip-outline" size={22} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <TabIcon name={"hardware-chip" as keyof typeof Ionicons.glyphMap} color={color} size={size} focused={focused} />
           ),
         }}
       />
@@ -174,10 +242,9 @@ const MainTabNavigator = () => {
         name="Settings"
         component={SettingsScreen}
         options={{
-          title: t('navigation.settings', '设置'),
           tabBarLabel: t('navigation.settings', '设置'),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings-outline" size={22} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <TabIcon name={"settings" as keyof typeof Ionicons.glyphMap} color={color} size={size} focused={focused} />
           ),
         }}
       />
@@ -251,13 +318,6 @@ const RootNavigator = () => {
             }}
           />
           <RootStack.Screen 
-            name="Status" 
-            component={StatusScreen}
-            options={{
-              headerShown: false
-            }}
-          />
-          <RootStack.Screen 
             name="GlobalSettings" 
             component={GlobalSettingsScreen}
             options={{
@@ -300,159 +360,36 @@ const AppNavigator = ({ initialApiConfigured }: { initialApiConfigured: boolean 
   const colorScheme = useColorScheme();
   const [apiUrlSettingsVisible, setApiUrlSettingsVisible] = React.useState(!initialApiConfigured);
   
-  // 如果API基础URL未配置，先显示设置模态框
-  if (apiUrlSettingsVisible) {
-    return (
-      <NavigationContainer ref={navigationRef}>
-        <SafeAreaProvider>
-          <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-          <ApiUrlSetupScreen onComplete={() => setApiUrlSettingsVisible(false)} />
-        </SafeAreaProvider>
-      </NavigationContainer>
-    );
-  }
+  // 设置完成回调函数
+  const handleApiSetupComplete = React.useCallback(() => {
+    // 添加延迟以确保所有状态已正确保存
+    setTimeout(() => {
+      setApiUrlSettingsVisible(false);
+    }, 300);
+  }, []);
+  
+  // 使用 useMemo 优化渲染内容
+  const navigationContent = React.useMemo(() => {
+    if (apiUrlSettingsVisible) {
+      return (
+        <ApiUrlSettings 
+          mode="fullscreen"
+          onComplete={handleApiSetupComplete}
+          saveConfigured={true}
+        />
+      );
+    }
+    return <RootNavigator />;
+  }, [apiUrlSettingsVisible, handleApiSetupComplete]);
   
   return (
     <NavigationContainer ref={navigationRef}>
       <SafeAreaProvider>
         <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-        <RootNavigator />
+        {navigationContent}
       </SafeAreaProvider>
     </NavigationContainer>
   );
 };
-
-// 添加API URL配置屏幕组件
-interface ApiUrlSetupScreenProps {
-  onComplete: () => void;
-}
-
-const ApiUrlSetupScreen: React.FC<ApiUrlSetupScreenProps> = ({ onComplete }) => {
-  const { t } = useTranslation();
-  const [apiUrl, setApiUrl] = React.useState(API_BASE_URL);
-  const [saving, setSaving] = React.useState(false);
-  
-  const handleSave = async () => {
-    try {
-      setSaving(true);
-      await saveApiBaseUrl(apiUrl);
-      
-      // 标记API URL已配置
-      await AsyncStorage.setItem('api_url_configured', 'true');
-      
-      setSaving(false);
-      onComplete();
-    } catch (error) {
-      console.error(t('settings.apiUrlSaveFailed'), error);
-      setSaving(false);
-    }
-  };
-  
-  return (
-    <View style={styles.setupContainer}>
-      <View style={styles.setupContent}>
-        <Text style={styles.setupTitle}>{t('setup.welcome')}</Text>
-        <Text style={styles.setupSubtitle}>{t('setup.firstTimeSetup')}</Text>
-        
-        <Text style={styles.setupLabel}>{t('settings.apiBaseUrl')}</Text>
-        <TextInput
-          style={styles.setupInput}
-          value={apiUrl}
-          onChangeText={setApiUrl}
-          placeholder="http://..."
-          autoCapitalize="none"
-          placeholderTextColor="#999"
-        />
-        
-        <Text style={styles.setupHelper}>
-          {t('settings.apiHelperText')}
-        </Text>
-        
-        <TouchableOpacity 
-          style={styles.setupButton}
-          onPress={handleSave}
-          disabled={saving}
-        >
-          {saving ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.setupButtonText}>
-              {t('setup.continue')}
-            </Text>
-          )}
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-};
-
-// 添加相关样式
-const styles = StyleSheet.create({
-  setupContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    padding: 20,
-  },
-  setupContent: {
-    width: '100%',
-    maxWidth: 400,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  setupTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  setupSubtitle: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 32,
-  },
-  setupLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#333',
-    marginBottom: 8,
-  },
-  setupInput: {
-    backgroundColor: '#f9f9f9',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    marginBottom: 12,
-  },
-  setupHelper: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 32,
-    lineHeight: 18,
-  },
-  setupButton: {
-    backgroundColor: '#0066cc',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  setupButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-});
 
 export default AppNavigator; 

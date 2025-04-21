@@ -8,7 +8,8 @@ import {
   Switch,
   Alert,
   Modal,
-  Button
+  Platform,
+  Image
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
@@ -17,6 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { useAuthStore } from '../../store/authStore';
 import { navigateAndReset } from '../../navigation/navigationUtils';
+import SafeAreaWrapper from '../../components/SafeAreaWrapper';
 
 // 引入语言切换函数
 import { changeLanguage } from '../../i18n/i18n';
@@ -82,7 +84,6 @@ const browserDirectLogout = () => {
 // 应用设置类型
 interface AppSettings {
   language: string;
-  theme: 'light' | 'dark' | 'system';
   notifications: {
     monitorAlerts: boolean;
     agentAlerts: boolean;
@@ -92,7 +93,6 @@ interface AppSettings {
 // 默认设置
 const defaultSettings: AppSettings = {
   language: 'zh',
-  theme: 'light',
   notifications: {
     monitorAlerts: true,
     agentAlerts: true
@@ -105,9 +105,9 @@ const SettingsScreen: React.FC = () => {
   
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [userEmail, setUserEmail] = useState<string>('');
+  const [userName, setUserName] = useState<string>('');
   const [appVersion, setAppVersion] = useState<string>('');
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
-  const [themeModalVisible, setThemeModalVisible] = useState(false);
   
   // 加载设置
   const loadSettings = async () => {
@@ -119,8 +119,9 @@ const SettingsScreen: React.FC = () => {
       
       // 获取当前用户信息
       const user = await authService.getUserFromStorage();
-      if (user && user.email) {
-        setUserEmail(user.email);
+      if (user) {
+        setUserEmail(user.email || '');
+        setUserName(user.username || '用户');
       }
       
       // 获取应用版本
@@ -154,15 +155,6 @@ const SettingsScreen: React.FC = () => {
       console.error('切换语言失败', error);
       Alert.alert(t('common.error', '错误'), t('settings.languageChangeFailed', '切换语言失败'));
     }
-  };
-  
-  // 切换主题
-  const handleThemeChange = (theme: 'light' | 'dark' | 'system') => {
-    const newSettings = { ...settings, theme };
-    saveSettings(newSettings);
-    setThemeModalVisible(false);
-    
-    // 实际项目中这里需要应用主题变更
   };
   
   // 打开监控告警设置页面
@@ -250,325 +242,269 @@ const SettingsScreen: React.FC = () => {
     setLanguageModalVisible(true);
   };
   
-  // 打开主题选择器
-  const handleOpenThemeSelector = () => {
-    setThemeModalVisible(true);
-  };
-  
   // 组件挂载时加载设置
   useEffect(() => {
     loadSettings();
   }, []);
   
+  // 渲染菜单项
+  const renderMenuItem = (
+    icon: string, 
+    title: string, 
+    onPress?: () => void, 
+    value?: string | React.ReactNode,
+    showArrow: boolean = true
+  ) => {
+    return (
+      <TouchableOpacity 
+        style={styles.menuItem}
+        onPress={onPress}
+        disabled={!onPress}
+        activeOpacity={onPress ? 0.7 : 1}
+      >
+        <View style={styles.menuItemContent}>
+          <View style={styles.menuItemIcon}>
+            <Ionicons name={icon as any} size={22} color="#0066cc" />
+          </View>
+          <Text style={styles.menuItemText}>{title}</Text>
+        </View>
+        <View style={styles.menuItemRight}>
+          {value && (
+            typeof value === 'string' ? 
+              <Text style={styles.menuItemValue}>{value}</Text> :
+              value
+          )}
+          {showArrow && onPress && (
+            <Ionicons name="chevron-forward" size={18} color="#ccc" style={styles.arrowIcon} />
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  };
+  
   return (
-    <View style={styles.container}>
+    <SafeAreaWrapper>
       <ScrollView 
-        style={styles.scrollContainer}
-        contentContainerStyle={styles.scrollContent}
+        style={styles.container}
         showsVerticalScrollIndicator={false}
       >
-        {/* 账户部分 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('settings.account', '账户')}</Text>
-          <TouchableOpacity 
-            style={styles.menuItem}
-            onPress={() => navigation.navigate('Profile')}
-          >
-            <View style={styles.menuItemContent}>
-              <Ionicons name="person-outline" size={22} color="#0066cc" />
-              <Text style={styles.menuItemText}>{t('settings.profile', '个人资料')}</Text>
+        {/* 用户资料部分 */}
+        <View style={styles.profileContainer}>
+          <View style={styles.profileLeft}>
+            <View style={styles.avatarContainer}>
+              <Text style={styles.avatarText}>{userName ? userName.charAt(0).toUpperCase() : 'U'}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#ccc" />
+            <Text style={styles.userName}>{userName}</Text>
+          </View>
+          <TouchableOpacity style={styles.profileButton} onPress={() => navigation.navigate('Profile')}>
+            <Text style={styles.profileButtonText}>{t('settings.editProfile', '编辑资料')}</Text>
           </TouchableOpacity>
         </View>
         
-        {/* 语言设置 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('settings.language', '语言')}</Text>
-          <TouchableOpacity 
-            style={styles.menuItem}
-            onPress={handleOpenLanguageSelector}
-          >
-            <View style={styles.menuItemContent}>
-              <Ionicons name="language" size={22} color="#0066cc" />
-              <Text style={styles.menuItemText}>{t('settings.language', '语言')}</Text>
-            </View>
-            <View style={styles.menuItemValueContainer}>
-              <Text style={styles.menuItemValue}>
-                {settings.language === 'zh' ? '中文' : 'English'}
-              </Text>
-              <Ionicons name="chevron-forward" size={20} color="#ccc" />
-            </View>
-          </TouchableOpacity>
+        {/* 设置部分 */}
+        <View style={styles.settingsSection}>
+          <Text style={styles.sectionTitle}>{t('settings.generalTitle', '通用设置')}</Text>
+          
+          {/* 语言选择 */}
+          {renderMenuItem(
+            'language-outline',
+            t('settings.language', '语言'),
+            handleOpenLanguageSelector,
+            t(`languages.${settings.language}`, settings.language === 'zh' ? '中文' : 'English')
+          )}
+          
+          {/* 全局设置 */}
+          {renderMenuItem(
+            'options-outline',
+            t('settings.globalSettings', '全局设置'),
+            () => navigation.navigate('GlobalSettings')
+          )}
         </View>
         
-        {/* 语言选择器弹出框 */}
+        {/* 通知部分 */}
+        <View style={styles.settingsSection}>
+          <Text style={styles.sectionTitle}>{t('settings.notificationsTitle', '通知设置')}</Text>
+          
+          {/* 监控告警通知 */}
+          {renderMenuItem(
+            'notifications-outline',
+            t('settings.monitorNotifications', '监控告警'),
+            handleOpenMonitorNotifications
+          )}
+          
+          {/* 客户端告警通知 */}
+          {renderMenuItem(
+            'server-outline',
+            t('settings.agentNotifications', '客户端告警'),
+            handleOpenAgentNotifications
+          )}
+          
+          {/* 通知渠道 */}
+          {renderMenuItem(
+            'mail-outline',
+            t('settings.notificationChannels', '通知渠道'),
+            () => navigation.navigate('NotificationChannels')
+          )}
+        </View>
+        
+        {/* 关于部分 */}
+        <View style={styles.settingsSection}>
+          <Text style={styles.sectionTitle}>{t('settings.aboutTitle', '关于')}</Text>
+          
+          {/* 应用版本 */}
+          {renderMenuItem(
+            'information-circle-outline',
+            t('settings.appVersion', '应用版本'),
+            undefined,
+            appVersion,
+            false
+          )}
+        </View>
+        
+        {/* 退出登录按钮 */}
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Ionicons name="log-out-outline" size={20} color="#f76363" style={styles.logoutIcon} />
+          <Text style={styles.logoutText}>{t('auth.logout', '退出登录')}</Text>
+        </TouchableOpacity>
+        
+        {/* 版本信息 */}
+        <Text style={styles.versionText}>Version {appVersion}</Text>
+        
+        {/* 语言选择弹窗 */}
         <Modal
-          animationType="slide"
+          animationType="fade"
           transparent={true}
           visible={languageModalVisible}
-          onRequestClose={() => setLanguageModalVisible(false)}
+          onRequestClose={() => {
+            setLanguageModalVisible(false);
+          }}
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContainer}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>{t('settings.selectLanguage', '选择语言')}</Text>
-                <TouchableOpacity 
-                  style={styles.closeButton}
-                  onPress={() => setLanguageModalVisible(false)}
-                >
-                  <Ionicons name="close" size={24} color="#333" />
+                <TouchableOpacity onPress={() => setLanguageModalVisible(false)}>
+                  <Ionicons name="close" size={24} color="#666" />
                 </TouchableOpacity>
               </View>
-              
-              <View style={styles.languageOptions}>
-                <TouchableOpacity 
-                  style={[styles.languageOption, settings.language === 'zh' && styles.selectedLanguageOption]}
-                  onPress={() => handleLanguageChange('zh')}
-                >
-                  <Text style={styles.languageOptionText}>中文</Text>
-                  {settings.language === 'zh' && (
-                    <Ionicons name="checkmark" size={22} color="#0066cc" />
-                  )}
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={[styles.languageOption, settings.language === 'en' && styles.selectedLanguageOption]}
-                  onPress={() => handleLanguageChange('en')}
-                >
-                  <Text style={styles.languageOptionText}>English</Text>
-                  {settings.language === 'en' && (
-                    <Ionicons name="checkmark" size={22} color="#0066cc" />
-                  )}
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                style={[
+                  styles.languageOption,
+                  settings.language === 'zh' && styles.selectedLanguage
+                ]}
+                onPress={() => handleLanguageChange('zh')}
+              >
+                <Text style={styles.languageText}>中文</Text>
+                {settings.language === 'zh' && (
+                  <Ionicons name="checkmark" size={20} color="#0066cc" />
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.languageOption,
+                  settings.language === 'en' && styles.selectedLanguage
+                ]}
+                onPress={() => handleLanguageChange('en')}
+              >
+                <Text style={styles.languageText}>English</Text>
+                {settings.language === 'en' && (
+                  <Ionicons name="checkmark" size={20} color="#0066cc" />
+                )}
+              </TouchableOpacity>
             </View>
           </View>
         </Modal>
-        
-        {/* 外观设置 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('settings.appearance', '外观')}</Text>
-          <TouchableOpacity 
-            style={styles.menuItem}
-            onPress={handleOpenThemeSelector}
-          >
-            <View style={styles.menuItemContent}>
-              <Ionicons 
-                name={
-                  settings.theme === 'light' 
-                    ? 'sunny-outline' 
-                    : settings.theme === 'dark' 
-                      ? 'moon-outline' 
-                      : 'contrast-outline'
-                } 
-                size={22} 
-                color={
-                  settings.theme === 'light' 
-                    ? '#ffb224' 
-                    : settings.theme === 'dark' 
-                      ? '#666' 
-                      : '#0066cc'
-                } 
-              />
-              <Text style={styles.menuItemText}>{t('settings.theme', '主题')}</Text>
-            </View>
-            <View style={styles.menuItemValueContainer}>
-              <Text style={styles.menuItemValue}>
-                {settings.theme === 'light' 
-                  ? t('settings.themeLight', '浅色') 
-                  : settings.theme === 'dark' 
-                    ? t('settings.themeDark', '深色') 
-                    : t('settings.themeSystem', '跟随系统')
-                }
-              </Text>
-              <Ionicons name="chevron-forward" size={20} color="#ccc" />
-            </View>
-          </TouchableOpacity>
-        </View>
-        
-        {/* 主题选择器弹出框 */}
-        <Modal
-          animationType="slide"
-          transparent={true}
-          visible={themeModalVisible}
-          onRequestClose={() => setThemeModalVisible(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContainer}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>{t('settings.selectTheme', '选择主题')}</Text>
-                <TouchableOpacity 
-                  style={styles.closeButton}
-                  onPress={() => setThemeModalVisible(false)}
-                >
-                  <Ionicons name="close" size={24} color="#333" />
-                </TouchableOpacity>
-              </View>
-              
-              <View style={styles.themeOptions}>
-                <TouchableOpacity 
-                  style={[styles.themeOption, settings.theme === 'light' && styles.selectedThemeOption]}
-                  onPress={() => handleThemeChange('light')}
-                >
-                  <View style={styles.themeOptionContent}>
-                    <Ionicons name="sunny-outline" size={22} color="#ffb224" />
-                    <Text style={styles.themeOptionText}>{t('settings.themeLight', '浅色')}</Text>
-                  </View>
-                  {settings.theme === 'light' && (
-                    <Ionicons name="checkmark" size={22} color="#0066cc" />
-                  )}
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={[styles.themeOption, settings.theme === 'dark' && styles.selectedThemeOption]}
-                  onPress={() => handleThemeChange('dark')}
-                >
-                  <View style={styles.themeOptionContent}>
-                    <Ionicons name="moon-outline" size={22} color="#666" />
-                    <Text style={styles.themeOptionText}>{t('settings.themeDark', '深色')}</Text>
-                  </View>
-                  {settings.theme === 'dark' && (
-                    <Ionicons name="checkmark" size={22} color="#0066cc" />
-                  )}
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={[styles.themeOption, settings.theme === 'system' && styles.selectedThemeOption]}
-                  onPress={() => handleThemeChange('system')}
-                >
-                  <View style={styles.themeOptionContent}>
-                    <Ionicons name="contrast-outline" size={22} color="#0066cc" />
-                    <Text style={styles.themeOptionText}>{t('settings.themeSystem', '跟随系统')}</Text>
-                  </View>
-                  {settings.theme === 'system' && (
-                    <Ionicons name="checkmark" size={22} color="#0066cc" />
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
-        
-        {/* 告警通知设置 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('settings.notifications', '告警通知设置')}</Text>
-          
-          <TouchableOpacity 
-            style={styles.menuItem}
-            onPress={() => navigation.navigate('GlobalSettings')}
-          >
-            <View style={styles.menuItemContent}>
-              <Ionicons name="settings-outline" size={22} color="#0066cc" />
-              <Text style={styles.menuItemText}>{t('settings.globalSettings', '全局设置')}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#ccc" />
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.menuItem}
-            onPress={() => navigation.navigate('NotificationChannels')}
-          >
-            <View style={styles.menuItemContent}>
-              <Ionicons name="notifications-outline" size={22} color="#0066cc" />
-              <Text style={styles.menuItemText}>{t('settings.notificationChannels', '通知渠道')}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#ccc" />
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.menuItem}
-            onPress={handleOpenMonitorNotifications}
-          >
-            <View style={styles.menuItemContent}>
-              <Ionicons name="globe-outline" size={22} color="#0066cc" />
-              <Text style={styles.menuItemText}>{t('settings.notificationsMonitor', '监控告警通知')}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#ccc" />
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.menuItem}
-            onPress={handleOpenAgentNotifications}
-          >
-            <View style={styles.menuItemContent}>
-              <Ionicons name="hardware-chip-outline" size={22} color="#0066cc" />
-              <Text style={styles.menuItemText}>{t('settings.notificationsAgent', '客户端告警通知')}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#ccc" />
-          </TouchableOpacity>
-        </View>
-        
-        {/* 关于 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('settings.about', '关于')}</Text>
-          <View style={styles.menuItem}>
-            <View style={styles.menuItemContent}>
-              <Ionicons name="information-circle-outline" size={22} color="#0066cc" />
-              <Text style={styles.menuItemText}>{t('settings.version', '版本')}</Text>
-            </View>
-            <Text style={styles.menuItemValue}>{appVersion}</Text>
-          </View>
-        </View>
-        
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>XUGOU 监控 © 2025</Text>
-        </View>
-        
-        {/* 额外的间隔区域 */}
-        <View style={styles.spacer} />
-        
-        {/* 退出登录按钮 */}
-        <View style={styles.logoutContainer}>
-          <TouchableOpacity 
-            style={styles.logoutButton}
-            onPress={() => {
-              console.log('退出按钮被点击 - 直接事件回调');
-              // 执行退出逻辑
-              handleLogout();
-            }}
-            activeOpacity={0.5}
-            testID="logoutButton"
-          >
-            <Ionicons name="log-out-outline" size={24} color="white" />
-            <Text style={styles.logoutButtonText}>{t('auth.logout', '退出登录')}</Text>
-          </TouchableOpacity>
-          <Text style={styles.logoutDescription}>{t('auth.logoutDescription', '退出当前账户并返回登录界面')}</Text>
-        </View>
-        
-        {/* 底部安全区域，确保内容不被导航栏遮挡 */}
-        <View style={styles.safeArea} />
       </ScrollView>
-    </View>
+    </SafeAreaWrapper>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f7f9fc',
+    padding: 16,
   },
-  scrollContainer: {
+  profileContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  profileLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
     flex: 1,
   },
-  scrollContent: {
-    flexGrow: 1,
-    paddingTop: 16,
-    paddingBottom: 20,
-    paddingHorizontal: 16,
+  avatarContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f0f4f9',
+    marginRight: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  section: {
+  avatarText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#0066cc',
+    textAlign: 'center',
+  },
+  userName: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+  },
+  profileButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#f0f4f9',
+    height: 36,
+    justifyContent: 'center',
+  },
+  profileButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0066cc',
+  },
+  settingsSection: {
     backgroundColor: 'white',
-    borderRadius: 12,
+    borderRadius: 16,
+    padding: 16,
     marginBottom: 16,
-    boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.05)',
-    elevation: 2,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 12,
     color: '#333',
+    marginBottom: 12,
   },
   menuItem: {
     flexDirection: 'row',
@@ -578,68 +514,69 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
-  selectedMenuItem: {
-    backgroundColor: 'rgba(0, 102, 204, 0.05)',
-  },
   menuItemContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+  },
+  menuItemIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: '#f0f4f9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   menuItemText: {
     fontSize: 15,
     color: '#333',
-    marginLeft: 12,
+  },
+  menuItemRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   menuItemValue: {
     fontSize: 14,
     color: '#888',
+    marginRight: 4,
   },
-  menuItemValueContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  languageCode: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#0066cc',
-    width: 22,
-    textAlign: 'center',
-  },
-  footer: {
-    padding: 20,
-    alignItems: 'center',
-  },
-  footerText: {
-    fontSize: 12,
-    color: '#888',
-  },
-  logoutContainer: {
-    paddingHorizontal: 24,
-    paddingBottom: 20,
-    marginTop: 0,
+  arrowIcon: {
+    marginLeft: 2,
   },
   logoutButton: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f76363',
-    borderRadius: 12,
-    paddingVertical: 20,
-    marginHorizontal: 0,
-    boxShadow: '0px 2px 5px rgba(0, 0, 0, 0.3)',
-    elevation: 4,
+    padding: 16,
+    backgroundColor: 'white',
+    borderRadius: 16,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
-  logoutButtonText: {
-    color: 'white',
-    fontSize: 18,
+  logoutIcon: {
+    marginRight: 8,
+  },
+  logoutText: {
+    fontSize: 17,
     fontWeight: '600',
-    marginLeft: 12,
+    color: '#f76363',
   },
-  logoutDescription: {
-    textAlign: 'center',
+  versionText: {
     fontSize: 12,
-    color: '#888',
-    marginTop: 10,
+    color: '#aaa',
+    textAlign: 'center',
+    marginBottom: 24,
   },
   modalOverlay: {
     flex: 1,
@@ -651,24 +588,30 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingBottom: 30,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -3 },
+        shadowOpacity: 0.1,
+        shadowRadius: 6,
+      },
+      android: {
+        elevation: 10,
+      },
+    }),
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-  },
-  closeButton: {
-    padding: 4,
-  },
-  languageOptions: {
-    marginTop: 10,
+    color: '#333',
   },
   languageOption: {
     flexDirection: 'row',
@@ -676,41 +619,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#f0f0f0',
   },
-  selectedLanguageOption: {
+  selectedLanguage: {
     backgroundColor: 'rgba(0, 102, 204, 0.05)',
   },
-  languageOptionText: {
+  languageText: {
     fontSize: 16,
-  },
-  themeOptions: {
-    marginTop: 10,
-  },
-  themeOption: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  selectedThemeOption: {
-    backgroundColor: 'rgba(0, 102, 204, 0.05)',
-  },
-  themeOptionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  themeOptionText: {
-    fontSize: 16,
-    marginLeft: 12,
-  },
-  spacer: {
-    height: 40,
-  },
-  safeArea: {
-    height: 200,
+    color: '#333',
   },
 });
 

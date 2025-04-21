@@ -13,7 +13,12 @@
  * 2. 确保后端服务器设置了正确的CORS配置
  * 3. 如果使用HTTPS，确保证书有效
  */
-export let API_BASE_URL = 'http://localhost:8787';
+import { Platform } from 'react-native';
+
+// 根据平台设置默认API_BASE_URL
+export let API_BASE_URL = Platform.OS === 'android' 
+  ? 'http://10.0.2.2:8787'  // Android模拟器访问本机服务
+  : 'http://localhost:8787'; // iOS模拟器和其他环境
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -23,7 +28,6 @@ const API_URL_STORAGE_KEY = 'api_base_url';
 // 保存API基础URL到存储
 export const saveApiBaseUrl = async (url: string): Promise<void> => {
   if (!url || !url.trim()) {
-    console.error('无效的API URL');
     return Promise.reject(new Error('无效的API URL'));
   }
   
@@ -34,12 +38,15 @@ export const saveApiBaseUrl = async (url: string): Promise<void> => {
       url = `http://${url}`;
     }
     
-    // 尝试创建URL对象来验证
-    new URL(url);
+    // 使用正则表达式进行基本验证而不是new URL()
+    const urlPattern = /^(https?:\/\/)([\w.-]+)(:\d+)?(\/.*)?$/;
+    if (!urlPattern.test(url)) {
+      throw new Error('URL格式不正确');
+    }
     
     await AsyncStorage.setItem(API_URL_STORAGE_KEY, url);
     API_BASE_URL = url;
-    console.log('API URL已保存:', url);
+    
     return Promise.resolve();
   } catch (error) {
     console.error('保存API基础URL失败', error);

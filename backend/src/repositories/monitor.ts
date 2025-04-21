@@ -98,7 +98,7 @@ export async function insertMonitorStatusHistory(db: Bindings['DB'], monitorId: 
   ).bind(monitorId, status, now).run();
 }
 
-// 记录监控检查详情 - 正常情况
+// 记录监控检查详情
 export async function insertMonitorCheck(
   db: Bindings['DB'], 
   monitorId: number, 
@@ -153,12 +153,12 @@ export async function recordMonitorError(
   await insertMonitorStatusHistory(db, monitorId, 'down');
   
   // 记录检查详情
-  await insertMonitorCheck(db, monitorId, 'down', 0, 0, errorMessage);
+  await insertMonitorCheck(db, monitorId, 'down', 0, null, errorMessage);
   
   // 使用ISO格式的时间戳
   const now = new Date().toISOString();
   
-  // 更新监控状态 - 修复SQL语法错误(去掉多余的P)
+  // 更新监控状态
   return await db.prepare(
     `UPDATE monitors 
      SET status = 'down',
@@ -175,139 +175,149 @@ export async function recordMonitorError(
   ).bind(now, monitorId, monitorId).run();
 }
 
-/**
- * 检查单个监控 - 抽象通用的监控检查逻辑
- * @param db 数据库连接
- * @param monitor 监控对象
- * @param updateRecords 是否更新数据库记录
- * @returns 检查结果
- */
-export async function checkSingleMonitor(
-  db: Bindings['DB'], 
-  monitor: Monitor
+// 创建新监控
+export async function createMonitor(
+  db: Bindings['DB'],
+  name: string,
+  url: string,
+  method: string = 'GET',
+  interval: number = 60,
+  timeout: number = 30,
+  expectedStatus: number = 200,
+  headers: string = '{}',
+  body: string = '',
+  userId: number
 ) {
-  try {
-    console.log(`开始检查监控项: ${monitor.name} (${monitor.url})`);
-    
-    const startTime = Date.now();
-    let response;
-    let error = null;
-    
-    // 解析 headers
-    let customHeaders = {};
-    try {
-      customHeaders = JSON.parse(monitor.headers || '{}');
-    } catch (e) {
-      console.error('解析请求头错误:', e);
-    }
-    
-    try {
-      const controller = new AbortController();
-      // 设置超时
-      const timeoutId = setTimeout(() => controller.abort(), monitor.timeout * 1000);
-      
-      response = await fetch(monitor.url, {
-        method: monitor.method,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-          'Accept-Encoding': 'gzip, deflate, br',
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache',
-          'Sec-Ch-Ua': '"Google Chrome";v="123", "Not:A-Brand";v="8"',
-          'Sec-Ch-Ua-Mobile': '?0',
-          'Sec-Ch-Ua-Platform': '"macOS"',
-          'Sec-Fetch-Dest': 'document',
-          'Sec-Fetch-Mode': 'navigate',
-          'Sec-Fetch-Site': 'none',
-          'Sec-Fetch-User': '?1',
-          'Upgrade-Insecure-Requests': '1',
-          'Referer': new URL(monitor.url).origin,
-          ...customHeaders
-        },
-        body: monitor.method !== 'GET' && monitor.method !== 'HEAD' ? monitor.body : undefined,
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    }
-    
-    const endTime = Date.now();
-    const responseTime = endTime - startTime;
-    
-    // 检查响应状态
-    let isUp = false;
-    
-    // 支持状态码范围检查
-    if (monitor.expected_status === 2) {
-      // 如果是2，则表示2xx
-      isUp = response ? (response.status >= 200 && response.status < 300) : false;
-    } else if (monitor.expected_status === 3) {
-      // 如果是3，则表示3xx
-      isUp = response ? (response.status >= 300 && response.status < 400) : false;
-    } else if (monitor.expected_status === 4) {
-      // 如果是4，则表示4xx
-      isUp = response ? (response.status >= 400 && response.status < 500) : false;
-    } else if (monitor.expected_status === 5) {
-      // 如果是5，则表示5xx
-      isUp = response ? (response.status >= 500 && response.status < 600) : false;
-    } else {
-      // 其他情况，精确匹配
-      isUp = response ? (response.status === monitor.expected_status) : false;
-    }
-    
-    const status = isUp ? 'up' : 'down';
-    const now = new Date().toISOString();
-    
-    // 添加调试日志
-    console.log(`监控状态判断: 返回状态码=${response?.status}, 期望状态码=${monitor.expected_status}, 最终状态=${status}`);
+  const now = new Date().toISOString();
   
-    // 记录状态历史
-    await insertMonitorStatusHistory(db, monitor.id, status);
-    
-    // 添加检查记录
-    await insertMonitorCheck(
-    db,
-    monitor.id,
-    status,
-    responseTime,
-    response ? response.status : null,
-    error
-    );
-      
-    // 更新监控状态
-    await updateMonitorStatus(db, monitor.id, status, responseTime);
-    
-    console.log(`监控项检查完成: ${monitor.name}, 状态: ${status}, 响应时间: ${responseTime}ms`);
-    
-    return {
-      success: true,
-      status,
-      responseTime,
-      statusCode: response ? response.status : null,
-      error,
-      checked_at: now,
-      previous_status: monitor.status,
-      monitor_id: monitor.id,
-      name: monitor.name
-    };
-  } catch (error: any) {
-    console.error(`检查监控项失败: ${monitor.name}`, error);
-    
-    // 记录错误状态和更新监控状态
-    await recordMonitorError(db, monitor.id, error.message);
-    
-    return {
-      success: false,
-      status: 'down',
-      error: error.message,
-      checked_at: new Date().toISOString(),
-      previous_status: monitor.status,
-      monitor_id: monitor.id,
-      name: monitor.name
-    };
+  const result = await db.prepare(
+    `INSERT INTO monitors 
+     (name, url, method, interval, timeout, expected_status, headers, body, created_by, active, status, uptime, response_time, last_checked, created_at, updated_at) 
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    name,
+    url,
+    method,
+    interval,
+    timeout,
+    expectedStatus,
+    headers,
+    body,
+    userId,
+    1, // active
+    'pending',
+    100.0,
+    0,
+    null,
+    now,
+    now
+  ).run();
+  
+  if (!result.success) {
+    throw new Error('创建监控失败');
   }
+  
+  // 获取新创建的监控
+  return await db.prepare(
+    'SELECT * FROM monitors WHERE rowid = last_insert_rowid()'
+  ).first<Monitor>();
+}
+
+// 更新监控配置
+export async function updateMonitorConfig(
+  db: Bindings['DB'],
+  id: number,
+  updates: Partial<Monitor>
+) {
+  // 准备更新字段
+  const fields: string[] = [];
+  const values: any[] = [];
+  
+  if (updates.name !== undefined) {
+    fields.push('name = ?');
+    values.push(updates.name);
+  }
+  
+  if (updates.url !== undefined) {
+    fields.push('url = ?');
+    values.push(updates.url);
+  }
+  
+  if (updates.method !== undefined) {
+    fields.push('method = ?');
+    values.push(updates.method);
+  }
+  
+  if (updates.interval !== undefined) {
+    fields.push('interval = ?');
+    values.push(updates.interval);
+  }
+  
+  if (updates.timeout !== undefined) {
+    fields.push('timeout = ?');
+    values.push(updates.timeout);
+  }
+  
+  if (updates.expected_status !== undefined) {
+    fields.push('expected_status = ?');
+    values.push(updates.expected_status);
+  }
+  
+  if (updates.headers !== undefined) {
+    fields.push('headers = ?');
+    values.push(updates.headers);
+  }
+  
+  if (updates.body !== undefined) {
+    fields.push('body = ?');
+    values.push(updates.body);
+  }
+  
+  if (updates.active !== undefined) {
+    fields.push('active = ?');
+    values.push(updates.active ? 1 : 0);
+  }
+  
+  // 添加更新时间
+  fields.push('updated_at = ?');
+  values.push(new Date().toISOString());
+  
+  // 没有要更新的字段时返回
+  if (fields.length === 0) {
+    return { message: '没有提供要更新的字段' };
+  }
+  
+  // 添加 ID 作为 WHERE 条件
+  values.push(id);
+  
+  // 执行更新
+  const result = await db.prepare(
+    `UPDATE monitors SET ${fields.join(', ')} WHERE id = ?`
+  ).bind(...values).run();
+  
+  if (!result.success) {
+    throw new Error('更新监控失败');
+  }
+  
+  // 获取更新后的监控
+  return await db.prepare(
+    'SELECT * FROM monitors WHERE id = ?'
+  ).bind(id).first<Monitor>();
+}
+
+// 删除监控
+export async function deleteMonitor(db: Bindings['DB'], id: number) {
+  // 先删除关联的历史数据
+  await db.prepare(
+    'DELETE FROM monitor_status_history WHERE monitor_id = ?'
+  ).bind(id).run();
+  
+  await db.prepare(
+    'DELETE FROM monitor_checks WHERE monitor_id = ?'
+  ).bind(id).run();
+  
+  // 执行删除监控
+  return await db.prepare(
+    'DELETE FROM monitors WHERE id = ?'
+  ).bind(id).run();
 } 

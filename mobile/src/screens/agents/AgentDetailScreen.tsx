@@ -13,28 +13,8 @@ import { useTranslation } from 'react-i18next';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-
-// 客户端接口定义
-interface Agent {
-  id: string;
-  name: string;
-  hostname: string;
-  ip_address?: string;
-  status: string;
-  version?: string;
-  operating_system?: string;
-  last_seen?: string;
-  created_at: string;
-  cpu_usage?: number;
-  memory_usage?: number;
-  disk_usage?: number;
-  memory_total?: number;
-  memory_used?: number;
-  disk_total?: number;
-  disk_used?: number;
-  network_rx?: number;
-  network_tx?: number;
-}
+import agentService, { Agent } from '../../api/agents';
+import SafeAreaWrapper from '../../components/SafeAreaWrapper';
 
 // 资源历史记录
 interface ResourceHistory {
@@ -44,56 +24,6 @@ interface ResourceHistory {
   memory_usage: number;
   disk_usage: number;
 }
-
-// 模拟服务
-const agentService = {
-  getAgent: (id: string): Promise<Agent> => {
-    return Promise.resolve({
-      id,
-      name: '生产服务器',
-      hostname: 'prod-server-01',
-      ip_address: '192.168.1.101',
-      status: 'active',
-      version: '1.5.2',
-      operating_system: 'Ubuntu 20.04 LTS',
-      last_seen: new Date().toISOString(),
-      created_at: '2023-08-15T10:20:30Z',
-      cpu_usage: 45.2,
-      memory_usage: 62.8,
-      disk_usage: 78.3,
-      memory_total: 16384, // MB
-      memory_used: 10309, // MB
-      disk_total: 512000, // MB
-      disk_used: 401000, // MB
-      network_rx: 15.6, // MB/s
-      network_tx: 5.2, // MB/s
-    });
-  },
-  
-  getResourceHistory: (id: string): Promise<ResourceHistory[]> => {
-    const history: ResourceHistory[] = [];
-    const now = new Date();
-    
-    // 生成过去24小时的历史数据
-    for (let i = 0; i < 24; i++) {
-      const timestamp = new Date(now.getTime() - i * 60 * 60 * 1000).toISOString();
-      
-      history.push({
-        id: `hist-${id}-${i}`,
-        timestamp,
-        cpu_usage: Math.floor(Math.random() * 80) + 10,
-        memory_usage: Math.floor(Math.random() * 40) + 40,
-        disk_usage: Math.floor(Math.random() * 10) + 70,
-      });
-    }
-    
-    return Promise.resolve(history.reverse());
-  },
-  
-  deleteAgent: (id: string): Promise<{ success: boolean }> => {
-    return Promise.resolve({ success: true });
-  }
-};
 
 // 路由参数类型
 type AgentDetailRouteProp = RouteProp<{ AgentDetail: { agentId: string } }, 'AgentDetail'>;
@@ -108,17 +38,38 @@ const AgentDetailScreen: React.FC = () => {
   const [resourceHistory, setResourceHistory] = useState<ResourceHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
-  // 加载客户端详情和资源历史
+  // 加载客户端详情
   const fetchData = async () => {
     try {
-      const agentData = await agentService.getAgent(agentId);
-      const historyData = await agentService.getResourceHistory(agentId);
+      console.log('AgentDetailScreen: 正在获取客户端数据...');
+      setError(null);
+      
+      const agentResponse = await agentService.getAgentById(agentId);
+      
+      if (!agentResponse.success || !agentResponse.agent) {
+        throw new Error(agentResponse.message || t('common.error.fetch', '获取数据失败'));
+      }
+      
+      const agentData = agentResponse.agent;
+      
+      // 计算资源使用百分比（如果后端未计算）
+      if (agentData.memory_total && agentData.memory_used && agentData.memory_usage === undefined) {
+        agentData.memory_usage = (agentData.memory_used / agentData.memory_total) * 100;
+      }
+      
+      if (agentData.disk_total && agentData.disk_used && agentData.disk_usage === undefined) {
+        agentData.disk_usage = (agentData.disk_used / agentData.disk_total) * 100;
+      }
       
       setAgent(agentData);
-      setResourceHistory(historyData);
+      
+      // 后续可以添加获取历史资源数据的API调用
+      // 暂时不获取resourceHistory数据，因为API似乎还没有提供
     } catch (error) {
       console.error('获取客户端详情失败', error);
+      setError(error instanceof Error ? error.message : t('agents.fetchDetailFailed', '获取客户端详情失败'));
       Alert.alert(t('common.error', '错误'), t('agents.fetchDetailFailed', '获取客户端详情失败'));
     } finally {
       setLoading(false);
@@ -151,6 +102,8 @@ const AgentDetailScreen: React.FC = () => {
               
               if (result.success) {
                 navigation.goBack();
+              } else {
+                Alert.alert(t('common.error', '错误'), result.message || t('agents.deleteFailed', '删除客户端失败'));
               }
             } catch (error) {
               console.error('删除客户端失败', error);
@@ -179,6 +132,47 @@ const AgentDetailScreen: React.FC = () => {
     if (usage > 80) return '#f76363';
     if (usage > 60) return '#ffb224';
     return '#30c85e';
+  };
+  
+  // 格式化网络流量单位
+  const formatNetworkSpeed = (value?: number): string => {
+    if (value === undefined) return t('common.unknown', '未知');
+    
+    // 当值小于 1024 KB/s 时，显示 KB/s
+    if (value < 1024) {
+      return `${value.toFixed(1)} KB/s`;
+    } 
+    // 当值大于等于 1024 KB/s 时，显示 MB/s
+    else {
+      const valueMB = value / 1024;
+      return `${valueMB.toFixed(1)} MB/s`;
+    }
+  };
+  
+  // 计算内存使用百分比
+  const calculateMemoryUsage = (agent: Agent): number => {
+    if (agent.memory_usage !== undefined) {
+      return agent.memory_usage;
+    }
+    
+    if (agent.memory_total && agent.memory_used) {
+      return (agent.memory_used / agent.memory_total) * 100;
+    }
+    
+    return 0;
+  };
+  
+  // 计算磁盘使用百分比
+  const calculateDiskUsage = (agent: Agent): number => {
+    if (agent.disk_usage !== undefined) {
+      return agent.disk_usage;
+    }
+    
+    if (agent.disk_total && agent.disk_used) {
+      return (agent.disk_used / agent.disk_total) * 100;
+    }
+    
+    return 0;
   };
   
   // 格式化日期
@@ -228,189 +222,238 @@ const AgentDetailScreen: React.FC = () => {
   // 组件挂载时加载数据
   useEffect(() => {
     fetchData();
+    
+    // 设置定时器，每分钟刷新一次数据
+    const intervalId = setInterval(() => {
+      console.log('AgentDetailScreen: 自动刷新数据...');
+      fetchData();
+    }, 60000); // 60000ms = 1分钟
+    
+    // 组件卸载时清除定时器
+    return () => clearInterval(intervalId);
   }, [agentId]);
   
   if (loading && !refreshing) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#0066cc" />
-      </View>
+      <SafeAreaWrapper>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#0066cc" />
+        </View>
+      </SafeAreaWrapper>
+    );
+  }
+  
+  if (error && !agent) {
+    return (
+      <SafeAreaWrapper>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={60} color="#f76363" />
+          <Text style={styles.errorText}>
+            {error || t('agents.notFound', '找不到客户端信息')}
+          </Text>
+          <TouchableOpacity
+            style={styles.errorButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.errorButtonText}>{t('common.goBack', '返回')}</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaWrapper>
     );
   }
   
   if (!agent) {
     return (
-      <View style={styles.errorContainer}>
-        <Ionicons name="alert-circle-outline" size={60} color="#f76363" />
-        <Text style={styles.errorText}>
-          {t('agents.notFound', '找不到客户端信息')}
-        </Text>
-        <TouchableOpacity
-          style={styles.errorButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.errorButtonText}>{t('common.goBack', '返回')}</Text>
-        </TouchableOpacity>
-      </View>
+      <SafeAreaWrapper>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={60} color="#f76363" />
+          <Text style={styles.errorText}>
+            {t('agents.notFound', '找不到客户端信息')}
+          </Text>
+          <TouchableOpacity
+            style={styles.errorButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.errorButtonText}>{t('common.goBack', '返回')}</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaWrapper>
     );
   }
   
   return (
-    <ScrollView 
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      {/* 头部信息 */}
-      <View style={styles.header}>
-        <View style={styles.titleContainer}>
-          <View style={[styles.statusDot, { backgroundColor: getStatusColor(agent.status) }]} />
-          <View>
-            <Text style={styles.title}>{agent.name}</Text>
-            <Text style={styles.hostname}>{agent.hostname}</Text>
+    <SafeAreaWrapper>
+      <ScrollView 
+        style={styles.container}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {/* 头部信息 */}
+        <View style={styles.header}>
+          <View style={styles.titleContainer}>
+            <View style={[styles.statusDot, { backgroundColor: getStatusColor(agent.status) }]} />
+            <View>
+              <Text style={styles.title}>{agent.name}</Text>
+              <Text style={styles.hostname}>{agent.hostname}</Text>
+            </View>
           </View>
+          <Text style={[styles.statusBadge, { backgroundColor: getStatusColor(agent.status) }]}>
+            {getStatusText(agent.status)}
+          </Text>
         </View>
-        <Text style={[styles.statusBadge, { backgroundColor: getStatusColor(agent.status) }]}>
-          {getStatusText(agent.status)}
-        </Text>
-      </View>
-      
-      {/* 基本信息卡片 */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>{t('agents.basicInfo', '基本信息')}</Text>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>{t('agents.hostname', '主机名')}:</Text>
-          <Text style={styles.detailValue}>{agent.hostname}</Text>
-        </View>
-        {agent.ip_address && (
+        
+        {/* 基本信息卡片 */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t('agents.basicInfo', '基本信息')}</Text>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>{t('agents.hostname', '主机名')}:</Text>
+            <Text style={styles.detailValue}>{agent.hostname || t('common.unknown', '未知')}</Text>
+          </View>
           <View style={styles.detailItem}>
             <Text style={styles.detailLabel}>{t('agents.ipAddress', 'IP地址')}:</Text>
-            <Text style={styles.detailValue}>{agent.ip_address}</Text>
+            {agent.ip_addresses ? (
+              <View>
+                {(() => {
+                  try {
+                    const ipArray = JSON.parse(String(agent.ip_addresses));
+                    return Array.isArray(ipArray) ? 
+                      ipArray.map((ip: string, index: number) => (
+                        <Text key={index} style={styles.detailValue}>{ip}</Text>
+                      ))
+                      : <Text style={styles.detailValue}>{String(agent.ip_addresses)}</Text>;
+                  } catch (e) {
+                    return <Text style={styles.detailValue}>{String(agent.ip_addresses)}</Text>;
+                  }
+                })()}
+              </View>
+            ) : (
+              <Text style={styles.detailValue}>{t('common.unknown', 'unknown')}</Text>
+            )}
+          </View>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>{t('agents.os', '操作系统')}:</Text>
+            <Text style={styles.detailValue}>{agent.operating_system || agent.os || t('common.unknown', '未知')}</Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>{t('agents.version', '版本')}:</Text>
+            <Text style={styles.detailValue}>{agent.version || t('common.unknown', '未知')}</Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>{t('agents.lastSeen', '最后在线')}:</Text>
+            <Text style={styles.detailValue}>{timeSince(agent.last_seen || agent.updated_at)}</Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>{t('agents.created', '安装时间')}:</Text>
+            <Text style={styles.detailValue}>{formatDate(agent.created_at)}</Text>
+          </View>
+        </View>
+        
+        {/* 资源使用情况 */}
+        {agent.status === 'active' && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>{t('agents.resources', '资源使用情况')}</Text>
+            
+            <View style={styles.resourceItem}>
+              <View style={styles.resourceHeader}>
+                <Text style={styles.resourceLabel}>CPU</Text>
+                <Text style={[
+                  styles.resourceValue, 
+                  { color: getResourceColor(agent.cpu_usage || 0) }
+                ]}>
+                  {agent.cpu_usage?.toFixed(1) || 0}%
+                </Text>
+              </View>
+              <View style={styles.progressBarContainer}>
+                <View 
+                  style={[
+                    styles.progressBar, 
+                    { 
+                      width: `${agent.cpu_usage || 0}%`,
+                      backgroundColor: getResourceColor(agent.cpu_usage || 0)
+                    }
+                  ]} 
+                />
+              </View>
+            </View>
+            
+            <View style={styles.resourceItem}>
+              <View style={styles.resourceHeader}>
+                <Text style={styles.resourceLabel}>{t('agents.memory', '内存')}</Text>
+                <Text style={[
+                  styles.resourceValue, 
+                  { color: getResourceColor(calculateMemoryUsage(agent)) }
+                ]}>
+                  {calculateMemoryUsage(agent).toFixed(1)}%
+                </Text>
+              </View>
+              <View style={styles.progressBarContainer}>
+                <View 
+                  style={[
+                    styles.progressBar, 
+                    { 
+                      width: `${calculateMemoryUsage(agent)}%`,
+                      backgroundColor: getResourceColor(calculateMemoryUsage(agent))
+                    }
+                  ]} 
+                />
+              </View>
+            </View>
+            
+            <View style={styles.resourceItem}>
+              <View style={styles.resourceHeader}>
+                <Text style={styles.resourceLabel}>{t('agents.disk', '磁盘')}</Text>
+                <Text style={[
+                  styles.resourceValue, 
+                  { color: getResourceColor(calculateDiskUsage(agent)) }
+                ]}>
+                  {calculateDiskUsage(agent).toFixed(1)}%
+                </Text>
+              </View>
+              <View style={styles.progressBarContainer}>
+                <View 
+                  style={[
+                    styles.progressBar, 
+                    { 
+                      width: `${calculateDiskUsage(agent)}%`,
+                      backgroundColor: getResourceColor(calculateDiskUsage(agent))
+                    }
+                  ]} 
+                />
+              </View>
+            </View>
+            
+            {agent.network_rx !== undefined && agent.network_tx !== undefined && (
+              <View style={styles.networkContainer}>
+                <View style={styles.networkItem}>
+                  <Ionicons name="arrow-down-outline" size={16} color="#30c85e" />
+                  <Text style={styles.networkLabel}>{t('agents.networkRx', '下载')}</Text>
+                  <Text style={styles.networkValue}>{formatNetworkSpeed(agent.network_rx)}</Text>
+                </View>
+                <View style={styles.networkItem}>
+                  <Ionicons name="arrow-up-outline" size={16} color="#0066cc" />
+                  <Text style={styles.networkLabel}>{t('agents.networkTx', '上传')}</Text>
+                  <Text style={styles.networkValue}>{formatNetworkSpeed(agent.network_tx)}</Text>
+                </View>
+              </View>
+            )}
           </View>
         )}
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>{t('agents.os', '操作系统')}:</Text>
-          <Text style={styles.detailValue}>{agent.operating_system || t('common.unknown', '未知')}</Text>
+        
+        {/* 操作按钮 */}
+        <View style={styles.actionsCard}>
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.dangerButton]}
+            onPress={handleDelete}
+          >
+            <Ionicons name="trash-outline" size={18} color="#fff" />
+            <Text style={styles.actionButtonText}>
+              {t('common.delete', '删除')}
+            </Text>
+          </TouchableOpacity>
         </View>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>{t('agents.version', '版本')}:</Text>
-          <Text style={styles.detailValue}>{agent.version || t('common.unknown', '未知')}</Text>
-        </View>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>{t('agents.lastSeen', '最后在线')}:</Text>
-          <Text style={styles.detailValue}>{timeSince(agent.last_seen)}</Text>
-        </View>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>{t('agents.created', '安装时间')}:</Text>
-          <Text style={styles.detailValue}>{formatDate(agent.created_at)}</Text>
-        </View>
-      </View>
-      
-      {/* 资源使用情况 */}
-      {agent.status === 'active' && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t('agents.resources', '资源使用情况')}</Text>
-          
-          <View style={styles.resourceItem}>
-            <View style={styles.resourceHeader}>
-              <Text style={styles.resourceLabel}>CPU</Text>
-              <Text style={[
-                styles.resourceValue, 
-                { color: getResourceColor(agent.cpu_usage || 0) }
-              ]}>
-                {agent.cpu_usage?.toFixed(1) || 0}%
-              </Text>
-            </View>
-            <View style={styles.progressBarContainer}>
-              <View 
-                style={[
-                  styles.progressBar, 
-                  { 
-                    width: `${agent.cpu_usage || 0}%`,
-                    backgroundColor: getResourceColor(agent.cpu_usage || 0)
-                  }
-                ]} 
-              />
-            </View>
-          </View>
-          
-          <View style={styles.resourceItem}>
-            <View style={styles.resourceHeader}>
-              <Text style={styles.resourceLabel}>{t('agents.memory', '内存')}</Text>
-              <Text style={[
-                styles.resourceValue, 
-                { color: getResourceColor(agent.memory_usage || 0) }
-              ]}>
-                {formatSize(agent.memory_used)} / {formatSize(agent.memory_total)} ({agent.memory_usage?.toFixed(1) || 0}%)
-              </Text>
-            </View>
-            <View style={styles.progressBarContainer}>
-              <View 
-                style={[
-                  styles.progressBar, 
-                  { 
-                    width: `${agent.memory_usage || 0}%`,
-                    backgroundColor: getResourceColor(agent.memory_usage || 0)
-                  }
-                ]} 
-              />
-            </View>
-          </View>
-          
-          <View style={styles.resourceItem}>
-            <View style={styles.resourceHeader}>
-              <Text style={styles.resourceLabel}>{t('agents.disk', '磁盘')}</Text>
-              <Text style={[
-                styles.resourceValue, 
-                { color: getResourceColor(agent.disk_usage || 0) }
-              ]}>
-                {formatSize(agent.disk_used)} / {formatSize(agent.disk_total)} ({agent.disk_usage?.toFixed(1) || 0}%)
-              </Text>
-            </View>
-            <View style={styles.progressBarContainer}>
-              <View 
-                style={[
-                  styles.progressBar, 
-                  { 
-                    width: `${agent.disk_usage || 0}%`,
-                    backgroundColor: getResourceColor(agent.disk_usage || 0)
-                  }
-                ]} 
-              />
-            </View>
-          </View>
-          
-          {agent.network_rx !== undefined && agent.network_tx !== undefined && (
-            <View style={styles.networkContainer}>
-              <View style={styles.networkItem}>
-                <Ionicons name="arrow-down-outline" size={16} color="#30c85e" />
-                <Text style={styles.networkLabel}>{t('agents.networkRx', '下载')}</Text>
-                <Text style={styles.networkValue}>{agent.network_rx.toFixed(1)} MB/s</Text>
-              </View>
-              <View style={styles.networkItem}>
-                <Ionicons name="arrow-up-outline" size={16} color="#0066cc" />
-                <Text style={styles.networkLabel}>{t('agents.networkTx', '上传')}</Text>
-                <Text style={styles.networkValue}>{agent.network_tx.toFixed(1)} MB/s</Text>
-              </View>
-            </View>
-          )}
-        </View>
-      )}
-      
-      {/* 操作按钮 */}
-      <View style={styles.actionsCard}>
-        <TouchableOpacity 
-          style={[styles.actionButton, styles.dangerButton]}
-          onPress={handleDelete}
-        >
-          <Ionicons name="trash-outline" size={18} color="#fff" />
-          <Text style={styles.actionButtonText}>
-            {t('common.delete', '删除')}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaWrapper>
   );
 };
 

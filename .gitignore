@@ -29,6 +29,9 @@ mobile/.expo/
 mobile/build/
 mobile/dist/
 mobile/node_modules/
+mobile/ios/
+mobile/android/
+mobile/build-*
 
 # --- General Build & Distribution Artifacts ---
 # Common build output directories and files

@@ -1,34 +1,9 @@
 import { Hono } from 'hono';
-import { jwt } from 'hono/jwt';
 import { z } from 'zod';
 import { Bindings } from '../models/db';
-import { getJwtSecret } from '../utils/jwt';
-import { 
-  getNotificationChannels, 
-  getNotificationChannelById,
-  createNotificationChannel, 
-  updateNotificationChannel,
-  deleteNotificationChannel,
-  getNotificationTemplates,
-  getNotificationTemplateById,
-  createNotificationTemplate,
-  updateNotificationTemplate,
-  deleteNotificationTemplate,
-  getNotificationConfig,
-  createOrUpdateSettings,
-  getNotificationHistory
-} from '../db/notification';
-import { Context, Next } from 'hono';
+import * as NotificationService from '../services/NotificationService';
 
 const notifications = new Hono<{ Bindings: Bindings }>();
-
-// JWT验证中间件
-notifications.use('/*', async (c, next) => {
-  const jwtMiddleware = jwt({
-    secret: getJwtSecret(c)
-  });
-  return jwtMiddleware(c, next);
-});
 
 // 获取通知配置
 notifications.get('/', async (c) => {
@@ -36,7 +11,7 @@ notifications.get('/', async (c) => {
     const db = c.env.DB;
     const userId = c.get('jwtPayload').id;
     
-    const config = await getNotificationConfig(db, userId);
+    const config = await NotificationService.getNotificationConfig(db, userId);
     
     return c.json({
       success: true,
@@ -56,7 +31,7 @@ notifications.get('/', async (c) => {
 notifications.get('/channels', async (c) => {
   try {
     const db = c.env.DB;
-    const channels = await getNotificationChannels(db);
+    const channels = await NotificationService.getNotificationChannels(db);
     
     return c.json({
       success: true,
@@ -85,7 +60,7 @@ notifications.get('/channels/:id', async (c) => {
       }, 400);
     }
     
-    const channel = await getNotificationChannelById(db, id);
+    const channel = await NotificationService.getNotificationChannelById(db, id);
     
     if (!channel) {
       return c.json({
@@ -125,8 +100,8 @@ notifications.post('/channels', async (c) => {
     
     const validatedData = schema.parse(body);
     
-    // 插入数据
-    const id = await createNotificationChannel(db, {
+    // 创建渠道
+    const result = await NotificationService.createNotificationChannel(db, {
       name: validatedData.name,
       type: validatedData.type,
       config: validatedData.config,
@@ -134,10 +109,17 @@ notifications.post('/channels', async (c) => {
       created_by: userId
     });
     
+    if (!result.success) {
+      return c.json({
+        success: false,
+        message: result.message || '创建通知渠道失败'
+      }, 500);
+    }
+    
     return c.json({
       success: true,
       data: {
-        id
+        id: result.id
       },
       message: '通知渠道创建成功'
     }, 201);
@@ -176,19 +158,19 @@ notifications.put('/channels/:id', async (c) => {
     
     const validatedData = schema.parse(body);
     
-    // 更新数据
-    const success = await updateNotificationChannel(db, id, validatedData);
+    // 更新渠道
+    const result = await NotificationService.updateNotificationChannel(db, id, validatedData);
     
-    if (!success) {
+    if (!result.success) {
       return c.json({
         success: false,
-        message: '通知渠道不存在或未做任何更改'
-      }, 404);
+        message: result.message || '更新通知渠道失败'
+      }, result.message?.includes('不存在') ? 404 : 500);
     }
     
     return c.json({
       success: true,
-      message: '通知渠道更新成功'
+      message: result.message || '通知渠道更新成功'
     });
   } catch (error) {
     console.error('更新通知渠道失败:', error);
@@ -213,28 +195,19 @@ notifications.delete('/channels/:id', async (c) => {
       }, 400);
     }
     
-    try {
-      const success = await deleteNotificationChannel(db, id);
-      
-      if (!success) {
-        return c.json({
-          success: false,
-          message: '通知渠道不存在'
-        }, 404);
-      }
-      
-      return c.json({
-        success: true,
-        message: '通知渠道删除成功'
-      });
-    } catch (dbError) {
-      console.error('删除通知渠道数据库操作失败:', dbError);
+    const result = await NotificationService.deleteNotificationChannel(db, id);
+    
+    if (!result.success) {
       return c.json({
         success: false,
-        message: '删除通知渠道失败，可能存在关联数据',
-        error: dbError instanceof Error ? dbError.message : String(dbError)
-      }, 500);
+        message: result.message || '删除通知渠道失败'
+      }, result.message?.includes('不存在') ? 404 : 500);
     }
+    
+    return c.json({
+      success: true,
+      message: result.message || '通知渠道删除成功'
+    });
   } catch (error) {
     console.error('删除通知渠道失败:', error);
     return c.json({
@@ -249,7 +222,7 @@ notifications.delete('/channels/:id', async (c) => {
 notifications.get('/templates', async (c) => {
   try {
     const db = c.env.DB;
-    const templates = await getNotificationTemplates(db);
+    const templates = await NotificationService.getNotificationTemplates(db);
     
     return c.json({
       success: true,
@@ -278,7 +251,7 @@ notifications.get('/templates/:id', async (c) => {
       }, 400);
     }
     
-    const template = await getNotificationTemplateById(db, id);
+    const template = await NotificationService.getNotificationTemplateById(db, id);
     
     if (!template) {
       return c.json({
@@ -319,20 +292,27 @@ notifications.post('/templates', async (c) => {
     
     const validatedData = schema.parse(body);
     
-    // 插入数据
-    const id = await createNotificationTemplate(db, {
+    // 创建模板
+    const result = await NotificationService.createNotificationTemplate(db, {
       name: validatedData.name,
       type: validatedData.type,
       subject: validatedData.subject,
       content: validatedData.content,
-      is_default: validatedData.is_default || false,
+      is_default: validatedData.is_default !== undefined ? validatedData.is_default : false,
       created_by: userId
     });
+    
+    if (!result.success) {
+      return c.json({
+        success: false,
+        message: result.message || '创建通知模板失败'
+      }, 500);
+    }
     
     return c.json({
       success: true,
       data: {
-        id
+        id: result.id
       },
       message: '通知模板创建成功'
     }, 201);
@@ -372,19 +352,19 @@ notifications.put('/templates/:id', async (c) => {
     
     const validatedData = schema.parse(body);
     
-    // 更新数据
-    const success = await updateNotificationTemplate(db, id, validatedData);
+    // 更新模板
+    const result = await NotificationService.updateNotificationTemplate(db, id, validatedData);
     
-    if (!success) {
+    if (!result.success) {
       return c.json({
         success: false,
-        message: '通知模板不存在或未做任何更改'
-      }, 404);
+        message: result.message || '更新通知模板失败'
+      }, result.message?.includes('不存在') ? 404 : 500);
     }
     
     return c.json({
       success: true,
-      message: '通知模板更新成功'
+      message: result.message || '通知模板更新成功'
     });
   } catch (error) {
     console.error('更新通知模板失败:', error);
@@ -409,18 +389,18 @@ notifications.delete('/templates/:id', async (c) => {
       }, 400);
     }
     
-    const success = await deleteNotificationTemplate(db, id);
+    const result = await NotificationService.deleteNotificationTemplate(db, id);
     
-    if (!success) {
+    if (!result.success) {
       return c.json({
         success: false,
-        message: '通知模板不存在'
-      }, 404);
+        message: result.message || '删除通知模板失败'
+      }, result.message?.includes('不存在') ? 404 : 500);
     }
     
     return c.json({
       success: true,
-      message: '通知模板删除成功'
+      message: result.message || '通知模板删除成功'
     });
   } catch (error) {
     console.error('删除通知模板失败:', error);
@@ -432,14 +412,13 @@ notifications.delete('/templates/:id', async (c) => {
   }
 });
 
-// 更新通知设置
+// 保存通知设置
 notifications.post('/settings', async (c) => {
   try {
     const db = c.env.DB;
     const userId = c.get('jwtPayload').id;
     const body = await c.req.json();
     
-    // 验证请求数据
     const schema = z.object({
       target_type: z.string(),
       target_id: z.number().nullable().optional(),
@@ -453,60 +432,47 @@ notifications.post('/settings', async (c) => {
       memory_threshold: z.number().optional(),
       on_disk_threshold: z.boolean().optional(),
       disk_threshold: z.number().optional(),
-      channels: z.string(),
+      channels: z.array(z.number()).or(z.string()),
       override_global: z.boolean().optional()
     });
     
     const validatedData = schema.parse(body);
     
-    // 创建完整的设置对象，包含所有必需字段的默认值
-    const settingsData = {
+    // 转换 channels 到 JSON 字符串
+    const channelsStr = typeof validatedData.channels === 'string' 
+      ? validatedData.channels 
+      : JSON.stringify(validatedData.channels);
+    
+    // 保存设置
+    const result = await NotificationService.createOrUpdateSettings(db, {
       user_id: userId,
       target_type: validatedData.target_type,
-      target_id: validatedData.target_id === undefined ? null : validatedData.target_id,
+      target_id: validatedData.target_id || null,
       enabled: validatedData.enabled,
-      
-      // 所有字段都设置默认值，后面会根据target_type重新赋值
-      on_down: false,
-      on_recovery: false,
-      
-      on_offline: false,
-      on_cpu_threshold: false,
-      cpu_threshold: 90,
-      on_memory_threshold: false,
-      memory_threshold: 85,
-      on_disk_threshold: false,
-      disk_threshold: 90,
-      
-      channels: validatedData.channels,
+      on_down: validatedData.on_down || false,
+      on_recovery: validatedData.on_recovery || false,
+      on_offline: validatedData.on_offline || false,
+      on_cpu_threshold: validatedData.on_cpu_threshold || false,
+      cpu_threshold: validatedData.cpu_threshold || 90,
+      on_memory_threshold: validatedData.on_memory_threshold || false,
+      memory_threshold: validatedData.memory_threshold || 90,
+      on_disk_threshold: validatedData.on_disk_threshold || false,
+      disk_threshold: validatedData.disk_threshold || 90,
+      channels: channelsStr,
       override_global: validatedData.override_global || false
-    };
+    });
     
-    // 根据目标类型更新特定字段
-    if (validatedData.target_type.includes('monitor') || validatedData.target_type === 'monitor') {
-      settingsData.on_down = validatedData.on_down || false;
-      settingsData.on_recovery = validatedData.on_recovery || false;
+    if (!result.success) {
+      return c.json({
+        success: false,
+        message: result.message || '保存通知设置失败'
+      }, 500);
     }
-    
-    if (validatedData.target_type.includes('agent') || validatedData.target_type === 'agent') {
-      settingsData.on_offline = validatedData.on_offline || false;
-      settingsData.on_recovery = validatedData.on_recovery || false;
-      settingsData.on_cpu_threshold = validatedData.on_cpu_threshold || false;
-      settingsData.cpu_threshold = validatedData.cpu_threshold || 90;
-      settingsData.on_memory_threshold = validatedData.on_memory_threshold || false;
-      settingsData.memory_threshold = validatedData.memory_threshold || 85;
-      settingsData.on_disk_threshold = validatedData.on_disk_threshold || false;
-      settingsData.disk_threshold = validatedData.disk_threshold || 90;
-    }
-    
-    const id = await createOrUpdateSettings(db, settingsData);
     
     return c.json({
       success: true,
-      data: {
-        id
-      },
-      message: '通知设置保存成功'
+      message: '通知设置保存成功',
+      data: { id: result.id }
     });
   } catch (error) {
     console.error('保存通知设置失败:', error);
@@ -522,20 +488,16 @@ notifications.post('/settings', async (c) => {
 notifications.get('/history', async (c) => {
   try {
     const db = c.env.DB;
+    const type = c.req.query('type') || '';
+    const target_id = c.req.query('target_id') ? parseInt(c.req.query('target_id')!) : undefined;
+    const status = c.req.query('status') || '';
+    const limit = c.req.query('limit') ? parseInt(c.req.query('limit')!) : 10;
+    const page = c.req.query('page') ? parseInt(c.req.query('page')!) : 1;
+    const offset = (page - 1) * limit;
     
-    // 获取查询参数
-    const type = c.req.query('type') || undefined;
-    const targetIdStr = c.req.query('targetId');
-    const targetId = targetIdStr ? parseInt(targetIdStr) : undefined;
-    const status = c.req.query('status') || undefined;
-    const limitStr = c.req.query('limit');
-    const limit = limitStr ? parseInt(limitStr) : 20;
-    const offsetStr = c.req.query('offset');
-    const offset = offsetStr ? parseInt(offsetStr) : 0;
-    
-    const history = await getNotificationHistory(db, {
+    const result = await NotificationService.getNotificationHistory(db, {
       type,
-      targetId,
+      targetId: target_id,
       status,
       limit,
       offset
@@ -543,7 +505,12 @@ notifications.get('/history', async (c) => {
     
     return c.json({
       success: true,
-      data: history
+      data: {
+        total: result.total,
+        records: result.records,
+        page,
+        limit
+      }
     });
   } catch (error) {
     console.error('获取通知历史记录失败:', error);
@@ -555,4 +522,86 @@ notifications.get('/history', async (c) => {
   }
 });
 
-export { notifications }; 
+// 测试通知渠道
+notifications.post('/test', async (c) => {
+  try {
+    const body = await c.req.json();
+    
+    // 验证参数
+    const schema = z.object({
+      channel: z.object({
+        id: z.union([z.string(), z.number()]).optional(),
+        name: z.string(),
+        type: z.string(),
+        config: z.any(),
+        enabled: z.boolean().default(true)
+      }),
+      subject: z.string().default('测试通知'),
+      content: z.string().default('这是一条测试通知，如果您收到这条消息，表明您的通知配置正确。')
+    });
+    
+    const { channel, subject, content } = schema.parse(body);
+    
+    // 确保 id 有值，否则设置为 0
+    const channelWithId = {
+      ...channel,
+      id: channel.id !== undefined ? channel.id : 0,
+      config: channel.config || {} // 确保 config 有值
+    };
+    
+    // 发送测试通知
+    const result = await NotificationService.sendTestEmail(channelWithId, subject, content);
+    
+    if (result.success) {
+      return c.json({
+        success: true,
+        message: '测试通知发送成功'
+      });
+    } else {
+      return c.json({
+        success: false,
+        message: `测试通知发送失败: ${result.error}`
+      }, 500);
+    }
+  } catch (error) {
+    console.error('发送测试通知失败:', error);
+    return c.json({
+      success: false,
+      message: '发送测试通知失败',
+      error: error instanceof Error ? error.message : String(error)
+    }, 500);
+  }
+});
+
+// 验证Telegram令牌
+notifications.post('/validate-telegram', async (c) => {
+  try {
+    const body = await c.req.json();
+    
+    // 验证参数
+    const schema = z.object({
+      botToken: z.string()
+    });
+    
+    const { botToken } = schema.parse(body);
+    
+    // 验证令牌
+    const isValid = await NotificationService.validateTelegramToken(botToken);
+    
+    return c.json({
+      success: true,
+      data: {
+        valid: isValid
+      }
+    });
+  } catch (error) {
+    console.error('验证Telegram令牌失败:', error);
+    return c.json({
+      success: false,
+      message: '验证Telegram令牌失败',
+      error: error instanceof Error ? error.message : String(error)
+    }, 500);
+  }
+});
+
+export default notifications; 

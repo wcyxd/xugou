@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS agents (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   hostname TEXT,
-  ip_address TEXT,
+  ip_addresses TEXT, -- 存储多个IP地址的JSON字符串
   os TEXT,
   version TEXT,
   cpu_usage REAL,
@@ -233,7 +233,7 @@ VALUES (
 
 🖥️ 主机信息:
   主机名: ${hostname}
-  IP地址: ${ip_address}
+  IP地址: ${ip_addresses}
   操作系统: ${os}
 
 ❗ 错误信息: ${error}',

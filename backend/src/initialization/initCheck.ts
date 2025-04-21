@@ -12,6 +12,7 @@ import {
   createNotificationTemplates,
   createNotificationChannelsAndSettings
 } from './database';
+import { migrateFrom003To004 } from '../migrations/migrate-0.0.3-to-0.0.4';
 
 // 检查表是否存在
 async function tableExists(env: Bindings, tableName: string): Promise<boolean> {
@@ -69,36 +70,17 @@ export async function checkAndInitializeDatabase(env: Bindings): Promise<{ initi
       }
     }
     
-    // 如果所有表都存在且用户表中有记录，则不需要初始化
-    if (missingTables.length === 0) {
-      // 确认用户表存在
-      const usersTableExists = await tableExists(env, 'users');
-      
-      if (usersTableExists) {
-        try {
-          const userCount = await env.DB.prepare('SELECT COUNT(*) as count FROM users').first<{ count: number }>();
-          if (userCount && userCount.count > 0) {
-            console.log('数据库已初始化且包含用户数据，跳过初始化操作...');
-            return {
-              initialized: false,
-              message: '数据库已经初始化，不需要重新初始化',
-            };
-          }
-        } catch (error) {
-          // 如果查询用户表失败，说明表可能存在但数据有问题，继续初始化
-          console.log('检查用户表数据出错:', error);
-        }
-      }
-    }
+    let initialized = false;
     
     // 如果有表不存在或用户表为空，则进行初始化
-    console.log('开始初始化数据库...');
-    console.log('缺失的表:', missingTables.length > 0 ? missingTables.join(', ') : '无');
-    
-    // 创建表结构（只创建不存在的表）
     if (missingTables.length > 0) {
+      console.log('开始初始化数据库...');
+      console.log('缺失的表:', missingTables.length > 0 ? missingTables.join(', ') : '无');
+      
+      // 创建表结构（只创建不存在的表）
       console.log('创建缺失的表结构...');
       await createTables(env);
+      initialized = true;
     }
     
     // 检查用户表是否存在并且为空，如果为空则创建管理员用户
@@ -107,6 +89,7 @@ export async function checkAndInitializeDatabase(env: Bindings): Promise<{ initi
       if (!userCount || userCount.count === 0) {
         console.log('用户表为空，创建管理员用户...');
         await createAdminUser(env);
+        initialized = true;
       } else {
         console.log('用户表已有数据，跳过创建管理员用户...');
       }
@@ -120,6 +103,7 @@ export async function checkAndInitializeDatabase(env: Bindings): Promise<{ initi
       if (!monitorCount || monitorCount.count === 0) {
         console.log('监控表为空，添加示例监控...');
         await addSampleMonitors(env);
+        initialized = true;
       } else {
         console.log('监控表已有数据，跳过添加示例监控...');
       }
@@ -133,6 +117,7 @@ export async function checkAndInitializeDatabase(env: Bindings): Promise<{ initi
       if (!agentCount || agentCount.count === 0) {
         console.log('客户端表为空，添加示例客户端...');
         await addSampleAgents(env);
+        initialized = true;
       } else {
         console.log('客户端表已有数据，跳过添加示例客户端...');
       }
@@ -146,6 +131,7 @@ export async function checkAndInitializeDatabase(env: Bindings): Promise<{ initi
       if (!statusPageCount || statusPageCount.count === 0) {
         console.log('状态页配置表为空，创建默认状态页...');
         await createDefaultStatusPage(env);
+        initialized = true;
       } else {
         console.log('状态页配置表已有数据，跳过创建默认状态页...');
       }
@@ -159,6 +145,7 @@ export async function checkAndInitializeDatabase(env: Bindings): Promise<{ initi
       if (!templateCount || templateCount.count === 0) {
         console.log('通知模板表为空，创建默认通知模板...');
         await createNotificationTemplates(env);
+        initialized = true;
       } else {
         console.log('通知模板表已有数据，跳过创建默认通知模板...');
       }
@@ -172,6 +159,7 @@ export async function checkAndInitializeDatabase(env: Bindings): Promise<{ initi
       if (!channelCount || channelCount.count === 0) {
         console.log('通知渠道表为空，创建默认通知渠道和设置...');
         await createNotificationChannelsAndSettings(env);
+        initialized = true;
       } else {
         console.log('通知渠道表已有数据，跳过创建默认通知渠道和设置...');
       }
@@ -179,12 +167,35 @@ export async function checkAndInitializeDatabase(env: Bindings): Promise<{ initi
       console.log('通知渠道表不存在，跳过检查通知渠道数据...');
     }
     
+    // 在所有初始化操作完成后执行迁移脚本，确保数据库表已存在
+    console.log('检查并执行数据库迁移...');
+    await runMigrations(env);
+    
     return {
-      initialized: true,
-      message: '数据库初始化成功',
+      initialized,
+      message: initialized ? '数据库初始化成功' : '数据库已经初始化，不需要重新初始化',
     };
   } catch (error) {
     console.error('数据库初始化检查错误:', error);
+    throw error;
+  }
+}
+
+// 执行所有迁移脚本
+async function runMigrations(env: Bindings): Promise<void> {
+  try {
+    console.log('开始执行数据库迁移...');
+    
+    // 从v0.0.3迁移到v0.0.4
+    const migrationResult = await migrateFrom003To004(env);
+    console.log(`迁移 0.0.3 -> 0.0.4: ${migrationResult.message}`);
+    
+    // 将来可以在这里添加更多迁移脚本
+    // 例如: const migration2Result = await migrateFrom004To005(env);
+    
+    console.log('所有迁移已完成');
+  } catch (error) {
+    console.error('执行迁移脚本时出错:', error);
     throw error;
   }
 } 

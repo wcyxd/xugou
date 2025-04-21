@@ -40,15 +40,18 @@ export async function createAgent(
   createdBy: number,
   status: string = 'inactive',
   hostname: string | null = null,
-  ipAddress: string | null = null,
   os: string | null = null,
-  version: string | null = null
+  version: string | null = null,
+  ipAddresses: string[] | null = null
 ) {
   const now = new Date().toISOString();
   
+  // 将 ipAddresses 数组转换为 JSON 字符串
+  const ipAddressesJson = ipAddresses ? JSON.stringify(ipAddresses) : null;
+  
   const result = await db.prepare(
     `INSERT INTO agents 
-     (name, token, created_by, status, created_at, updated_at, hostname, ip_address, os, version) 
+     (name, token, created_by, status, created_at, updated_at, hostname, ip_addresses, os, version) 
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     name,
@@ -58,7 +61,7 @@ export async function createAgent(
     now,
     now,
     hostname,
-    ipAddress,
+    ipAddressesJson,
     os,
     version
   ).run();
@@ -80,7 +83,7 @@ export async function updateAgent(
   fields: {
     name?: string;
     hostname?: string;
-    ip_address?: string;
+    ip_addresses?: string[];
     os?: string;
     version?: string;
     status?: string;
@@ -99,8 +102,14 @@ export async function updateAgent(
   // 添加需要更新的字段
   for (const [key, value] of Object.entries(fields)) {
     if (value !== undefined) {
-      fieldsToUpdate.push(`${key} = ?`);
-      values.push(value);
+      // 特殊处理 ip_addresses 数组，转换为 JSON 字符串
+      if (key === 'ip_addresses' && Array.isArray(value)) {
+        fieldsToUpdate.push(`${key} = ?`);
+        values.push(JSON.stringify(value));
+      } else {
+        fieldsToUpdate.push(`${key} = ?`);
+        values.push(value);
+      }
     }
   }
   
@@ -147,12 +156,15 @@ export async function updateAgentStatus(
     network_rx?: number;
     network_tx?: number;
     hostname?: string;
-    ip_address?: string;
+    ip_addresses?: string[];
     os?: string;
     version?: string;
   }
 ) {
   const now = new Date().toISOString();
+  
+  // 将 ip_addresses 数组转换为 JSON 字符串
+  const ipAddressesJson = metrics.ip_addresses ? JSON.stringify(metrics.ip_addresses) : null;
   
   const result = await db.prepare(
     `UPDATE agents SET 
@@ -165,7 +177,7 @@ export async function updateAgentStatus(
      network_rx = ?, 
      network_tx = ?, 
      hostname = ?,
-     ip_address = ?,
+     ip_addresses = ?,
      os = ?,
      version = ?,
      updated_at = ?
@@ -180,7 +192,7 @@ export async function updateAgentStatus(
     metrics.network_rx,
     metrics.network_tx,
     metrics.hostname,
-    metrics.ip_address,
+    ipAddressesJson,
     metrics.os,
     metrics.version,
     now,

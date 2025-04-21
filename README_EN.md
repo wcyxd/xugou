@@ -19,10 +19,7 @@ Currently implemented features:
 - ✅ Data Visualization - Real-time data display and historical trend analysis
 - ✅ Status Page - Customizable service status page
 - ✅ Alert Notifications - Anomaly event notifications through multiple channels (Email, Telegram, etc.)
-
-Planned features:
-
-- 📱 Mobile APP - Convenient monitoring status check on mobile devices
+- ✅ Mobile APP - Convenient monitoring status check on mobile devices
 
 ## ✨ Core Features
 
@@ -64,6 +61,12 @@ Default username: admin  Default password: admin123
 ### Video Tutorial
 
 Not yet available
+
+### Mobile
+
+Android APP: [Download Link](https://dl.xugou.mdzz.uk/latest/xugou.apk)
+
+iOS: No iOS version available as we haven't paid Apple's developer fee
 
 ## FAQ
 

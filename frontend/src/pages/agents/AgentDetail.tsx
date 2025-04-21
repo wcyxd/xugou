@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Box, Flex, Heading, Text, Button, Card, Badge, Tabs, Grid, Avatar } from '@radix-ui/themes';
-import { ArrowLeftIcon, Pencil1Icon, Cross2Icon, ReloadIcon, ClockIcon, InfoCircledIcon, LapTimerIcon, DesktopIcon, GlobeIcon, LaptopIcon } from '@radix-ui/react-icons';
+import { ArrowLeftIcon, Pencil1Icon, Cross2Icon, ReloadIcon, ClockIcon, InfoCircledIcon, LapTimerIcon, DesktopIcon, GlobeIcon, Link2Icon } from '@radix-ui/react-icons';
 import * as Toast from '@radix-ui/react-toast';
 import { getAgent, Agent, deleteAgent } from '../../api/agents';
 import ClientResourceSection from '../../components/ClientResourceSection';
@@ -258,7 +258,14 @@ const AgentDetail = () => {
                 <Heading size="5">{agent.name}</Heading>
                 <Text color="gray" size="2">
                   {agent.hostname ? agent.hostname : ''}
-                  {agent.hostname && agent.ip_address ? ` (${agent.ip_address})` : ''}
+                  {agent.hostname && agent.ip_addresses ? (() => {
+                    try {
+                      const ipArray = JSON.parse(String(agent.ip_addresses));
+                      return ipArray.length > 0 ? ` (${ipArray[0]})` : '';
+                    } catch (e) {
+                      return ` (${String(agent.ip_addresses)})`;
+                    }
+                  })() : ''}
                 </Text>
               </Box>
             </Flex>
@@ -317,11 +324,47 @@ const AgentDetail = () => {
                       
                       <Box>
                         <Flex align="center" gap="2">
-                          <LaptopIcon />
+                          <Link2Icon />
                           <Text as="div" size="2" weight="bold">{t('agent.ipAddress')}:</Text>
-                          <Text as="div" size="2">{agent.ip_address || t('common.notFound')}</Text>
+                          {agent.ip_addresses ? (
+                            (() => {
+                              try {
+                                const ipArray = JSON.parse(String(agent.ip_addresses));
+                                if (Array.isArray(ipArray) && ipArray.length > 0) {
+                                  return <Text as="div" size="2">{ipArray[0]}{ipArray.length > 1 ? ` (+${ipArray.length - 1})` : ''}</Text>;
+                                } else {
+                                  return <Text as="div" size="2">{String(agent.ip_addresses)}</Text>;
+                                }
+                              } catch (e) {
+                                return <Text as="div" size="2">{String(agent.ip_addresses)}</Text>;
+                              }
+                            })()
+                          ) : (
+                            <Text as="div" size="2" color="gray">{t('common.unknown')}</Text>
+                          )}
                         </Flex>
                       </Box>
+                      
+                      {/* 如果存在多个IP地址，展示完整列表 */}
+                      {agent.ip_addresses && (() => {
+                        try {
+                          const ipArray = JSON.parse(String(agent.ip_addresses));
+                          if (Array.isArray(ipArray) && ipArray.length > 1) {
+                            return (
+                              <Box pl="6" mt="1">
+                                <Flex direction="column" gap="1">
+                                  {ipArray.slice(1).map((ip, index) => (
+                                    <Text key={index} size="2" color="gray">{ip}</Text>
+                                  ))}
+                                </Flex>
+                              </Box>
+                            );
+                          }
+                          return null;
+                        } catch (e) {
+                          return null;
+                        }
+                      })()}
                     </Flex>
                   </Card>
 

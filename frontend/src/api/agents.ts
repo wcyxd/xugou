@@ -14,7 +14,7 @@ export interface Agent {
   network_rx: number;
   network_tx: number;
   hostname?: string;
-  ip_address?: string;
+  ip_addresses?: string;
   os?: string;
   version?: string;
   token?: string;
@@ -97,7 +97,7 @@ export const deleteAgent = async (id: number) => {
 export const updateAgent = async (id: number, data: {
   name?: string;
   hostname?: string;
-  ip_address?: string;
+  ip_addresses?: string;
   os?: string;
   version?: string;
   status?: string;

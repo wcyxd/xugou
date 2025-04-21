@@ -1,5 +1,5 @@
 // 定期检查客户端状态的任务
-import { getActiveAgents, setAgentInactive, getAgentById } from '../db/agent';
+import { getActiveAgents, setAgentInactive, getAgentById, getFormattedIPAddresses } from '../services';
 import { shouldSendNotification, sendNotification } from '../utils/notification';
 
 interface AgentResult {
@@ -86,10 +86,10 @@ async function handleAgentOfflineNotification(env: any, agentId: number, agentNa
       previous_status: 'online', // 添加previous_status变量
       time: new Date().toLocaleString('zh-CN'),
       hostname: agentData.hostname || '未知',
-      ip_address: agentData.ip_address || '未知',
+      ip_addresses: getFormattedIPAddresses(agentData.ip_addresses),
       os: agentData.os || '未知',
       error: '客户端连接超时',
-      details: `主机名: ${agentData.hostname || '未知'}\nIP地址: ${agentData.ip_address || '未知'}\n操作系统: ${agentData.os || '未知'}\n最后连接时间: ${new Date(agentData.updated_at).toLocaleString('zh-CN')}`
+      details: `主机名: ${agentData.hostname || '未知'}\nIP地址: ${getFormattedIPAddresses(agentData.ip_addresses)}\n操作系统: ${agentData.os || '未知'}\n最后连接时间: ${new Date(agentData.updated_at).toLocaleString('zh-CN')}`
     };
     
     // 发送通知
@@ -196,10 +196,10 @@ export async function handleAgentThresholdNotification(env: any, agentId: number
       previous_status: 'normal', // 添加previous_status变量
       time: new Date().toLocaleString('zh-CN'),
       hostname: agent.hostname || '未知',
-      ip_address: agent.ip_address || '未知',
+      ip_addresses: getFormattedIPAddresses(agent.ip_addresses),
       os: agent.os || '未知',
       error: `${metricName}(${value.toFixed(2)}%)超过阈值(${threshold}%)`,
-      details: `${metricName}: ${value.toFixed(2)}%\n阈值: ${threshold}%\n主机名: ${agent.hostname || '未知'}\nIP地址: ${agent.ip_address || '未知'}\n操作系统: ${agent.os || '未知'}`
+      details: `${metricName}: ${value.toFixed(2)}%\n阈值: ${threshold}%\n主机名: ${agent.hostname || '未知'}\nIP地址: ${getFormattedIPAddresses(agent.ip_addresses)}\n操作系统: ${agent.os || '未知'}`
     };
     
     // 发送通知

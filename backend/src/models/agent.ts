@@ -7,17 +7,17 @@ export interface Agent {
   status: string;
   created_at: string;
   updated_at: string;
-  hostname?: string;
-  ip_address?: string;
-  os?: string;
-  version?: string;
+  hostname: string | null;
+  ip_addresses: string | null; // 存储多个IP地址的JSON字符串
+  os: string | null;
+  version: string | null;
   
   // 资源指标字段
-  cpu_usage?: number;
-  memory_total?: number;
-  memory_used?: number;
-  disk_total?: number;
-  disk_used?: number;
-  network_rx?: number;
-  network_tx?: number;
+  cpu_usage: number | null;
+  memory_total: number | null;
+  memory_used: number | null;
+  disk_total: number | null;
+  disk_used: number | null;
+  network_rx: number | null;
+  network_tx: number | null;
 } 

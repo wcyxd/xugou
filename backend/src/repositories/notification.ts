@@ -361,56 +361,61 @@ export const createNotificationHistory = async (
   return ((result.meta as D1Meta)?.last_row_id) || 0;
 };
 
-// 查询通知历史记录
+// 获取通知历史记录
 export const getNotificationHistory = async (
   db: D1Database,
   filter: {
-    type?: string;
-    targetId?: number;
-    status?: string;
-    limit?: number;
-    offset?: number;
+    type?: string | undefined;
+    targetId?: number | undefined;
+    status?: string | undefined;
+    limit?: number | undefined;
+    offset?: number | undefined;
   }
 ): Promise<{ total: number; records: NotificationHistory[] }> => {
-  const conditions: string[] = [];
-  const params: any[] = [];
+  // 构建查询
+  let whereConditions = [];
+  let whereParams = [];
   
   if (filter.type) {
-    conditions.push('type = ?');
-    params.push(filter.type);
+    whereConditions.push('type = ?');
+    whereParams.push(filter.type);
   }
   
   if (filter.targetId !== undefined) {
-    conditions.push('target_id = ?');
-    params.push(filter.targetId);
+    whereConditions.push('target_id = ?');
+    whereParams.push(filter.targetId);
   }
   
   if (filter.status) {
-    conditions.push('status = ?');
-    params.push(filter.status);
+    whereConditions.push('status = ?');
+    whereParams.push(filter.status);
   }
   
-  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const whereClause = whereConditions.length > 0 
+    ? `WHERE ${whereConditions.join(' AND ')}` 
+    : '';
   
-  // 获取总记录数
-  const countResult = await db.prepare(
-    `SELECT COUNT(*) as total FROM notification_history ${whereClause}`
-  ).bind(...params).first<{ total: number }>();
+  // 查询总数
+  const countQuery = `SELECT COUNT(*) as count FROM notification_history ${whereClause}`;
+  const countResult = await db.prepare(countQuery).bind(...whereParams).first<{ count: number }>();
+  const total = countResult?.count || 0;
   
-  const total = countResult?.total || 0;
+  // 查询记录
+  const recordsQuery = `
+    SELECT * FROM notification_history 
+    ${whereClause}
+    ORDER BY sent_at DESC
+    LIMIT ? OFFSET ?
+  `;
   
-  // 获取分页记录
-  const limit = filter.limit || 20;
-  const offset = filter.offset || 0;
+  // 构建参数数组
+  const queryParams = [...whereParams, filter.limit || 10, filter.offset || 0];
   
-  const result = await db.prepare(
-    `SELECT * FROM notification_history ${whereClause} 
-     ORDER BY sent_at DESC LIMIT ? OFFSET ?`
-  ).bind(...params, limit, offset).all<NotificationHistory>();
+  const recordsResult = await db.prepare(recordsQuery).bind(...queryParams).all<NotificationHistory>();
   
   return {
     total,
-    records: result.results || []
+    records: recordsResult.results || []
   };
 };
 

@@ -21,7 +21,16 @@ export interface D1Result<T = unknown> {
   meta?: object;
 }
 
+// 版本元数据类型定义
+export interface VersionMetadata {
+  id?: string;
+  tag?: string;
+  timestamp?: string;
+  [key: string]: any;
+}
+
 // 通用绑定类型
 export type Bindings = {
   DB: D1Database;
+  CF_VERSION_METADATA?: VersionMetadata;
 }; 

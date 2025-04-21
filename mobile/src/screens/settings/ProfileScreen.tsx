@@ -12,6 +12,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import SafeAreaWrapper from '../../components/SafeAreaWrapper';
 import authService, { User } from '../../api/auth';
 
 // 直接导入User类型，而不是自己定义
@@ -150,154 +151,158 @@ const ProfileScreen: React.FC = () => {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#0066cc" />
-      </View>
+      <SafeAreaWrapper>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#0066cc" />
+        </View>
+      </SafeAreaWrapper>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.title}>{t('settings.profile', '个人资料')}</Text>
-        <View style={styles.placeholder} />
-      </View>
+    <SafeAreaWrapper>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#333" />
+          </TouchableOpacity>
+          <Text style={styles.title}>{t('settings.profile', '个人资料')}</Text>
+          <View style={styles.placeholder} />
+        </View>
 
-      <ScrollView style={styles.content}>
-        {/* 用户基本信息 */}
-        <View style={styles.profileHeader}>
-          <View style={styles.avatarContainer}>
-            <Text style={styles.avatarText}>{user?.username?.charAt(0).toUpperCase() || '?'}</Text>
+        <ScrollView style={styles.content}>
+          {/* 用户基本信息 */}
+          <View style={styles.profileHeader}>
+            <View style={styles.avatarContainer}>
+              <Text style={styles.avatarText}>{user?.username?.charAt(0).toUpperCase() || '?'}</Text>
+            </View>
+            <Text style={styles.username}>{user?.username || t('common.unknown', '未知用户')}</Text>
+            <Text style={styles.email}>{user?.email || t('common.notSet', '未设置')}</Text>
           </View>
-          <Text style={styles.username}>{user?.username || t('common.unknown', '未知用户')}</Text>
-          <Text style={styles.email}>{user?.email || t('common.notSet', '未设置')}</Text>
-        </View>
 
-        {/* 账户设置区域 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('profile.accountSettings', '账户设置')}</Text>
+          {/* 账户设置区域 */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{t('profile.accountSettings', '账户设置')}</Text>
 
-          {/* 修改邮箱选项 */}
-          {!showEmailForm ? (
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => setShowEmailForm(true)}
-            >
-              <View style={styles.menuItemContent}>
-                <Ionicons name="mail-outline" size={22} color="#0066cc" />
-                <Text style={styles.menuItemText}>{t('profile.changeEmail', '修改电子邮箱')}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#ccc" />
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.formContainer}>
-              <Text style={styles.formTitle}>{t('profile.updateEmail', '更新电子邮箱')}</Text>
-              
-              <TextInput
-                style={styles.input}
-                value={newEmail}
-                onChangeText={setNewEmail}
-                placeholder={t('profile.newEmail', '新电子邮箱')}
-                autoCapitalize="none"
-                keyboardType="email-address"
-              />
-              
-              <View style={styles.buttonRow}>
-                <TouchableOpacity 
-                  style={[styles.button, styles.cancelButton]}
-                  onPress={handleCancel}
-                  disabled={updating}
-                >
-                  <Text style={styles.cancelButtonText}>{t('common.cancel', '取消')}</Text>
-                </TouchableOpacity>
+            {/* 修改邮箱选项 */}
+            {!showEmailForm ? (
+              <TouchableOpacity 
+                style={styles.menuItem}
+                onPress={() => setShowEmailForm(true)}
+              >
+                <View style={styles.menuItemContent}>
+                  <Ionicons name="mail-outline" size={22} color="#0066cc" />
+                  <Text style={styles.menuItemText}>{t('profile.changeEmail', '修改电子邮箱')}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#ccc" />
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.formContainer}>
+                <Text style={styles.formTitle}>{t('profile.updateEmail', '更新电子邮箱')}</Text>
                 
-                <TouchableOpacity 
-                  style={[styles.button, styles.saveButton]}
-                  onPress={handleUpdateEmail}
-                  disabled={updating}
-                >
-                  {updating ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={styles.saveButtonText}>{t('common.save', '保存')}</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-
-          {/* 重置密码选项 */}
-          {!showPasswordForm ? (
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => setShowPasswordForm(true)}
-            >
-              <View style={styles.menuItemContent}>
-                <Ionicons name="key-outline" size={22} color="#0066cc" />
-                <Text style={styles.menuItemText}>{t('profile.resetPassword', '重置密码')}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#ccc" />
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.formContainer}>
-              <Text style={styles.formTitle}>{t('profile.resetPassword', '重置密码')}</Text>
-              
-              <TextInput
-                style={styles.input}
-                value={currentPassword}
-                onChangeText={setCurrentPassword}
-                placeholder={t('profile.currentPassword', '当前密码')}
-                secureTextEntry
-              />
-              
-              <TextInput
-                style={styles.input}
-                value={newPassword}
-                onChangeText={setNewPassword}
-                placeholder={t('profile.newPassword', '新密码')}
-                secureTextEntry
-              />
-              
-              <TextInput
-                style={styles.input}
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                placeholder={t('profile.confirmPassword', '确认新密码')}
-                secureTextEntry
-              />
-              
-              <View style={styles.buttonRow}>
-                <TouchableOpacity 
-                  style={[styles.button, styles.cancelButton]}
-                  onPress={handleCancel}
-                  disabled={updating}
-                >
-                  <Text style={styles.cancelButtonText}>{t('common.cancel', '取消')}</Text>
-                </TouchableOpacity>
+                <TextInput
+                  style={styles.input}
+                  value={newEmail}
+                  onChangeText={setNewEmail}
+                  placeholder={t('profile.newEmail', '新电子邮箱')}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
                 
-                <TouchableOpacity 
-                  style={[styles.button, styles.saveButton]}
-                  onPress={handleResetPassword}
-                  disabled={updating}
-                >
-                  {updating ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={styles.saveButtonText}>{t('common.save', '保存')}</Text>
-                  )}
-                </TouchableOpacity>
+                <View style={styles.buttonRow}>
+                  <TouchableOpacity 
+                    style={[styles.button, styles.cancelButton]}
+                    onPress={handleCancel}
+                    disabled={updating}
+                  >
+                    <Text style={styles.cancelButtonText}>{t('common.cancel', '取消')}</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[styles.button, styles.saveButton]}
+                    onPress={handleUpdateEmail}
+                    disabled={updating}
+                  >
+                    {updating ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.saveButtonText}>{t('common.save', '保存')}</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-          )}
-        </View>
-      </ScrollView>
-    </View>
+            )}
+
+            {/* 重置密码选项 */}
+            {!showPasswordForm ? (
+              <TouchableOpacity 
+                style={styles.menuItem}
+                onPress={() => setShowPasswordForm(true)}
+              >
+                <View style={styles.menuItemContent}>
+                  <Ionicons name="key-outline" size={22} color="#0066cc" />
+                  <Text style={styles.menuItemText}>{t('profile.resetPassword', '重置密码')}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#ccc" />
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.formContainer}>
+                <Text style={styles.formTitle}>{t('profile.resetPassword', '重置密码')}</Text>
+                
+                <TextInput
+                  style={styles.input}
+                  value={currentPassword}
+                  onChangeText={setCurrentPassword}
+                  placeholder={t('profile.currentPassword', '当前密码')}
+                  secureTextEntry
+                />
+                
+                <TextInput
+                  style={styles.input}
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  placeholder={t('profile.newPassword', '新密码')}
+                  secureTextEntry
+                />
+                
+                <TextInput
+                  style={styles.input}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  placeholder={t('profile.confirmPassword', '确认新密码')}
+                  secureTextEntry
+                />
+                
+                <View style={styles.buttonRow}>
+                  <TouchableOpacity 
+                    style={[styles.button, styles.cancelButton]}
+                    onPress={handleCancel}
+                    disabled={updating}
+                  >
+                    <Text style={styles.cancelButtonText}>{t('common.cancel', '取消')}</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[styles.button, styles.saveButton]}
+                    onPress={handleResetPassword}
+                    disabled={updating}
+                  >
+                    {updating ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.saveButtonText}>{t('common.save', '保存')}</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </View>
+        </ScrollView>
+      </View>
+    </SafeAreaWrapper>
   );
 };
 

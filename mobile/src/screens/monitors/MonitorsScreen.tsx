@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import monitorService, { Monitor } from '../../api/monitors';
+import SafeAreaWrapper from '../../components/SafeAreaWrapper';
 
 const MonitorsScreen: React.FC = () => {
   const { t } = useTranslation();
@@ -85,11 +86,11 @@ const MonitorsScreen: React.FC = () => {
   const getStatusText = (status: string) => {
     switch (status) {
       case 'up':
-        return t('monitors.status_up', '正常');
+        return t('monitors.statusDetails.up', '正常');
       case 'down':
-        return t('monitors.status_down', '故障');
+        return t('monitors.statusDetails.down', '故障');
       case 'pending':
-        return t('monitors.status_pending', '等待');
+        return t('monitors.statusDetails.pending', '等待');
       default:
         return status;
     }
@@ -101,48 +102,88 @@ const MonitorsScreen: React.FC = () => {
     return date.toLocaleString();
   };
   
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'up':
+        return 'checkmark-circle';
+      case 'down':
+        return 'alert-circle';
+      case 'pending':
+        return 'time';
+      default:
+        return 'help-circle';
+    }
+  };
+  
   const renderMonitorItem = ({ item }: { item: Monitor }) => (
     <TouchableOpacity
       style={styles.monitorItem}
       onPress={() => navigation.navigate('MonitorDetail', { monitorId: item.id })}
+      activeOpacity={0.7}
     >
-      <View style={styles.monitorHeader}>
-        <Text style={styles.monitorName}>{item.name}</Text>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-          <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
+      <View style={styles.monitorContent}>
+        {/* 顶部信息区 */}
+        <View style={styles.monitorHeader}>
+          <View style={styles.nameContainer}>
+            <Text style={styles.monitorName} numberOfLines={1} ellipsizeMode="tail">
+              {item.name}
+            </Text>
+            <View style={styles.statusIconWrapper}>
+              <Ionicons 
+                name={getStatusIcon(item.status)} 
+                size={16} 
+                color={getStatusColor(item.status)} 
+              />
+              <Text style={[styles.statusLabel, { color: getStatusColor(item.status) }]}>
+                {getStatusText(item.status)}
+              </Text>
+            </View>
+          </View>
+          
+          <View style={styles.typeTag}>
+            <Text style={styles.typeText}>{item.type?.toUpperCase() || 'HTTP'}</Text>
+          </View>
         </View>
-      </View>
-      
-      <View style={styles.monitorDetails}>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>{t('monitors.url', 'URL')}:</Text>
-          <Text style={styles.detailValue} numberOfLines={1} ellipsizeMode="tail">
+        
+        {/* URL区域 */}
+        <View style={styles.urlContainer}>
+          <Ionicons name="link" size={14} color="#666" style={styles.urlIcon} />
+          <Text style={styles.urlText} numberOfLines={1} ellipsizeMode="tail">
             {item.url || '-'}
           </Text>
         </View>
         
-        <View style={styles.detailRow}>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>{t('monitors.uptime', '正常率')}:</Text>
-            <Text style={styles.detailValue}>{item.uptime}%</Text>
+        {/* 分隔线 */}
+        <View style={styles.divider} />
+        
+        {/* 详细信息区 */}
+        <View style={styles.statsContainer}>
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{item.uptime}%</Text>
+            <Text style={styles.statLabel}>{t('monitors.uptime', '正常率')}</Text>
           </View>
           
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>{t('monitors.response_time', '响应时间')}:</Text>
-            <Text style={styles.detailValue}>{item.response_time} ms</Text>
+          <View style={styles.statDivider} />
+          
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{item.response_time}</Text>
+            <Text style={styles.statLabel}>{t('monitors.response_time', '响应时间(ms)')}</Text>
+          </View>
+          
+          <View style={styles.statDivider} />
+          
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{item.method || '-'}</Text>
+            <Text style={styles.statLabel}>{t('monitors.method', '请求方法')}</Text>
           </View>
         </View>
         
-        <View style={styles.detailRow}>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>{t('monitors.last_check', '最后检查')}:</Text>
-            <Text style={styles.detailValue}>{formatDate(item.last_checked)}</Text>
-          </View>
-          
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>{t('monitors.method', '方法')}:</Text>
-            <Text style={styles.detailValue}>{item.method || '-'}</Text>
-          </View>
+        {/* 最后检查时间 */}
+        <View style={styles.footerContainer}>
+          <Ionicons name="time-outline" size={14} color="#888" />
+          <Text style={styles.lastCheckText}>
+            {t('monitors.last_check', '最后检查')}: {formatDate(item.last_checked)}
+          </Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -152,88 +193,92 @@ const MonitorsScreen: React.FC = () => {
   
   if (loading && !refreshing) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#0066cc" />
-      </View>
+      <SafeAreaWrapper>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#0066cc" />
+        </View>
+      </SafeAreaWrapper>
     );
   }
   
   return (
-    <View style={styles.container}>
-      <View style={styles.filterContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <TouchableOpacity 
-            style={[styles.filterButton, filter === 'all' && styles.filterButtonActive]}
-            onPress={() => handleFilterChange('all')}
-          >
-            <Text style={[styles.filterText, filter === 'all' && styles.filterTextActive]}>
-              {t('monitors.filters.all', '全部')}
-            </Text>
-          </TouchableOpacity>
+    <SafeAreaWrapper>
+      <View style={styles.container}>
+        <View style={styles.filterContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <TouchableOpacity 
+              style={[styles.filterButton, filter === 'all' && styles.filterButtonActive]}
+              onPress={() => handleFilterChange('all')}
+            >
+              <Text style={[styles.filterText, filter === 'all' && styles.filterTextActive]}>
+                {t('monitors.filters.all', '全部')}
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.filterButton, filter === 'up' && styles.filterButtonActive]}
+              onPress={() => handleFilterChange('up')}
+            >
+              <View style={[styles.statusIndicator, { backgroundColor: '#30c85e' }]} />
+              <Text style={[styles.filterText, filter === 'up' && styles.filterTextActive]}>
+                {t('monitors.statusDetails.up', '正常')}
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.filterButton, filter === 'down' && styles.filterButtonActive]}
+              onPress={() => handleFilterChange('down')}
+            >
+              <View style={[styles.statusIndicator, { backgroundColor: '#f76363' }]} />
+              <Text style={[styles.filterText, filter === 'down' && styles.filterTextActive]}>
+                {t('monitors.statusDetails.down', '故障')}
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
           
           <TouchableOpacity 
-            style={[styles.filterButton, filter === 'up' && styles.filterButtonActive]}
-            onPress={() => handleFilterChange('up')}
-          >
-            <View style={[styles.statusIndicator, { backgroundColor: '#30c85e' }]} />
-            <Text style={[styles.filterText, filter === 'up' && styles.filterTextActive]}>
-              {t('monitors.status_up', '正常')}
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.filterButton, filter === 'down' && styles.filterButtonActive]}
-            onPress={() => handleFilterChange('down')}
-          >
-            <View style={[styles.statusIndicator, { backgroundColor: '#f76363' }]} />
-            <Text style={[styles.filterText, filter === 'down' && styles.filterTextActive]}>
-              {t('monitors.status_down', '故障')}
-            </Text>
-          </TouchableOpacity>
-        </ScrollView>
-        
-        <TouchableOpacity 
-          style={styles.addButton}
-          onPress={() => navigation.navigate('CreateMonitor')}
-        >
-          <Ionicons name="add" size={24} color="white" />
-        </TouchableOpacity>
-      </View>
-      
-      {filteredMonitors.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="alert-circle-outline" size={60} color="#ccc" />
-          <Text style={styles.emptyText}>
-            {t('monitors.noMonitorsFound', '没有找到监控项')}
-          </Text>
-          <TouchableOpacity 
-            style={styles.createButton}
+            style={styles.addButton}
             onPress={() => navigation.navigate('CreateMonitor')}
           >
-            <Text style={styles.createButtonText}>
-              {t('monitors.createFirst', '创建第一个监控')}
-            </Text>
+            <Ionicons name="add" size={24} color="white" />
           </TouchableOpacity>
         </View>
-      ) : (
-        <FlatList
-          data={filteredMonitors}
-          renderItem={renderMonitorItem}
-          keyExtractor={keyExtractor}
-          contentContainerStyle={styles.listContainer}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-        />
-      )}
-    </View>
+        
+        {filteredMonitors.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="alert-circle-outline" size={60} color="#ccc" />
+            <Text style={styles.emptyText}>
+              {t('monitors.noMonitorsFound', '没有找到监控项')}
+            </Text>
+            <TouchableOpacity 
+              style={styles.createButton}
+              onPress={() => navigation.navigate('CreateMonitor')}
+            >
+              <Text style={styles.createButtonText}>
+                {t('monitors.createFirst', '创建第一个监控')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <FlatList
+            data={filteredMonitors}
+            renderItem={renderMonitorItem}
+            keyExtractor={keyExtractor}
+            contentContainerStyle={styles.listContainer}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+          />
+        )}
+      </View>
+    </SafeAreaWrapper>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f7f9fc',
   },
   loadingContainer: {
     flex: 1,
@@ -245,10 +290,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingTop: 16,
-    paddingHorizontal: 10,
+    paddingBottom: 12,
+    paddingHorizontal: 12,
     backgroundColor: 'white',
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#eeeeee',
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
   },
   filterButton: {
     flexDirection: 'row',
@@ -257,17 +308,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     marginHorizontal: 4,
     borderRadius: 20,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#f5f7fa',
   },
   filterButtonActive: {
     backgroundColor: '#e0f0ff',
   },
   filterText: {
-    color: '#666',
+    fontSize: 13,
+    color: '#555',
   },
   filterTextActive: {
     color: '#0066cc',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   statusIndicator: {
     width: 8,
@@ -282,50 +334,108 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderRadius: 12,
     marginBottom: 16,
+    overflow: 'hidden',
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  monitorContent: {
+    flex: 1,
     padding: 16,
-    boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.05)',
-    elevation: 2,
   },
   monitorHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  nameContainer: {
+    flex: 1,
+    marginRight: 8,
   },
   monitorName: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
   },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: '#888',
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: 'white',
-  },
-  monitorDetails: {
-    marginBottom: 12,
-  },
-  detailItem: {
+  statusIconWrapper: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  detailLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 2,
-  },
-  detailValue: {
-    fontSize: 14,
+  statusLabel: {
+    fontSize: 13,
     fontWeight: '500',
+    marginLeft: 4,
   },
-  detailRow: {
+  typeTag: {
+    backgroundColor: '#f0f4f9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  typeText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#5a6c85',
+  },
+  urlContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  urlIcon: {
+    marginRight: 6,
+  },
+  urlText: {
+    fontSize: 14,
+    color: '#666',
+    flex: 1,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#f0f0f0',
+    marginVertical: 12,
+  },
+  statsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 12,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statDivider: {
+    width: 1,
+    backgroundColor: '#eeeeee',
+    marginHorizontal: 8,
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#888',
+    textAlign: 'center',
+  },
+  footerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#f5f5f5',
+  },
+  lastCheckText: {
+    fontSize: 12,
+    color: '#888',
+    marginLeft: 4,
   },
   emptyContainer: {
     flex: 1,
@@ -358,6 +468,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.5,
   },
 });
 

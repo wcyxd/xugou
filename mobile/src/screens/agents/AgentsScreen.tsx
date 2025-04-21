@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import agentService, { Agent } from '../../api/agents';
+import SafeAreaWrapper from '../../components/SafeAreaWrapper';
 
 const AgentsScreen: React.FC = () => {
   const { t } = useTranslation();
@@ -163,10 +164,19 @@ const AgentsScreen: React.FC = () => {
           <Text style={styles.infoText}>{item.os || t('common.unknown', '未知')}</Text>
         </View>
         
-        {item.ip_address && (
+        {item.ip_addresses && (
           <View style={styles.infoItem}>
             <Ionicons name="wifi-outline" size={14} color="#666" />
-            <Text style={styles.infoText}>{item.ip_address}</Text>
+            <Text style={styles.infoText}>{(() => {
+              try {
+                const ipArray = JSON.parse(String(item.ip_addresses));
+                return Array.isArray(ipArray) && ipArray.length > 0 
+                  ? ipArray.join(', ') // 显示所有 IP
+                  : String(item.ip_addresses);
+              } catch (e) {
+                return String(item.ip_addresses);
+              }
+            })()}</Text>
           </View>
         )}
         
@@ -259,81 +269,85 @@ const AgentsScreen: React.FC = () => {
   
   if (loading && !refreshing) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#0066cc" />
-      </View>
+      <SafeAreaWrapper>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#0066cc" />
+        </View>
+      </SafeAreaWrapper>
     );
   }
   
   return (
-    <View style={styles.container}>
-      <View style={styles.filterContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <TouchableOpacity 
-            style={[styles.filterButton, filter === 'all' && styles.filterButtonActive]}
-            onPress={() => handleFilterChange('all')}
-          >
-            <Text style={[styles.filterText, filter === 'all' && styles.filterTextActive]}>
-              {t('agents.filters.all', '全部')}
-            </Text>
-          </TouchableOpacity>
+    <SafeAreaWrapper>
+      <View style={styles.container}>
+        <View style={styles.filterContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <TouchableOpacity 
+              style={[styles.filterButton, filter === 'all' && styles.filterButtonActive]}
+              onPress={() => handleFilterChange('all')}
+            >
+              <Text style={[styles.filterText, filter === 'all' && styles.filterTextActive]}>
+                {t('agents.filters.all', '全部')}
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.filterButton, filter === 'active' && styles.filterButtonActive]}
+              onPress={() => handleFilterChange('active')}
+            >
+              <View style={[styles.statusIndicator, { backgroundColor: '#30c85e' }]} />
+              <Text style={[styles.filterText, filter === 'active' && styles.filterTextActive]}>
+                {t('agents.status_active', '在线')}
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.filterButton, filter === 'inactive' && styles.filterButtonActive]}
+              onPress={() => handleFilterChange('inactive')}
+            >
+              <View style={[styles.statusIndicator, { backgroundColor: '#888' }]} />
+              <Text style={[styles.filterText, filter === 'inactive' && styles.filterTextActive]}>
+                {t('agents.status_inactive', '离线')}
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
           
           <TouchableOpacity 
-            style={[styles.filterButton, filter === 'active' && styles.filterButtonActive]}
-            onPress={() => handleFilterChange('active')}
-          >
-            <View style={[styles.statusIndicator, { backgroundColor: '#30c85e' }]} />
-            <Text style={[styles.filterText, filter === 'active' && styles.filterTextActive]}>
-              {t('agents.status_active', '在线')}
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.filterButton, filter === 'inactive' && styles.filterButtonActive]}
-            onPress={() => handleFilterChange('inactive')}
-          >
-            <View style={[styles.statusIndicator, { backgroundColor: '#888' }]} />
-            <Text style={[styles.filterText, filter === 'inactive' && styles.filterTextActive]}>
-              {t('agents.status_inactive', '离线')}
-            </Text>
-          </TouchableOpacity>
-        </ScrollView>
-        
-        <TouchableOpacity 
-          style={styles.addButton}
-          onPress={() => navigation.navigate('CreateAgent')}
-        >
-          <Ionicons name="add" size={24} color="white" />
-        </TouchableOpacity>
-      </View>
-      
-      {filteredAgents.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="alert-circle-outline" size={60} color="#ccc" />
-          <Text style={styles.emptyText}>
-            {t('agents.noAgentsFound', '没有找到客户端')}
-          </Text>
-          <TouchableOpacity 
-            style={styles.createButton}
+            style={styles.addButton}
             onPress={() => navigation.navigate('CreateAgent')}
           >
-            <Text style={styles.createButtonText}>
-              {t('agents.createFirst', '创建第一个客户端')}
-            </Text>
+            <Ionicons name="add" size={24} color="white" />
           </TouchableOpacity>
         </View>
-      ) : (
-        <FlatList
-          data={filteredAgents}
-          renderItem={renderAgentItem}
-          keyExtractor={item => item.id.toString()}
-          contentContainerStyle={styles.listContainer}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-        />
-      )}
-    </View>
+        
+        {filteredAgents.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="alert-circle-outline" size={60} color="#ccc" />
+            <Text style={styles.emptyText}>
+              {t('agents.noAgentsFound', '没有找到客户端')}
+            </Text>
+            <TouchableOpacity 
+              style={styles.createButton}
+              onPress={() => navigation.navigate('CreateAgent')}
+            >
+              <Text style={styles.createButtonText}>
+                {t('agents.createFirst', '创建第一个客户端')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <FlatList
+            data={filteredAgents}
+            renderItem={renderAgentItem}
+            keyExtractor={(item) => String(item.id)}
+            contentContainerStyle={styles.listContainer}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+          />
+        )}
+      </View>
+    </SafeAreaWrapper>
   );
 };
 

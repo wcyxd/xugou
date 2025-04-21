@@ -172,7 +172,16 @@ const AgentsList = () => {
                 <Text>{agent.hostname || t('common.notFound')}</Text>
               </Table.Cell>
               <Table.Cell>
-                <Text>{agent.ip_address || t('common.notFound')}</Text>
+                <Text>{agent.ip_addresses ? (() => {
+                  try {
+                    const ipArray = JSON.parse(String(agent.ip_addresses));
+                    return Array.isArray(ipArray) && ipArray.length > 0 
+                      ? ipArray.join(', ') 
+                      : String(agent.ip_addresses);
+                  } catch (e) {
+                    return String(agent.ip_addresses);
+                  }
+                })() : t('common.notFound')}</Text>
               </Table.Cell>
               <Table.Cell>
                 <Badge 

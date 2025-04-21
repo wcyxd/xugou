@@ -1,47 +1,34 @@
 import { Hono } from 'hono';
 import { logger } from 'hono/logger';
-import { cors } from 'hono/cors';
 import { Bindings } from './models/db';
 import { prettyJSON } from 'hono/pretty-json';
-import { checkAndInitializeDatabase } from './setup/initCheck';
+import { checkAndInitializeDatabase } from './initialization/initCheck';
 import { ExecutionContext } from 'hono';
-
+import { corsMiddleware } from './middlewares';
+import { jwtMiddleware } from './middlewares/auth';
 // 添加全局变量声明
 declare global {
   var isInitialized: boolean;
 }
 
 // 导入路由
-import authRoutes from './routes/auth';
-import monitorRoutes from './routes/monitors';
-import agentRoutes from './routes/agents';
-import userRoutes from './routes/users';
-import statusRoutes from './routes/status';
-import initDbRoutes from './setup/database';
-import { monitorTask, runScheduledTasks } from './tasks';
-import { notifications } from './routes/notifications';
+import authRoutes from './api/auth';
+import monitorRoutes from './api/monitors';
+import agentRoutes from './api/agents';
+import userRoutes from './api/users';
+import statusRoutes from './api/status';
+import initDbRoutes from './initialization/database';
+import { monitorTask, runScheduledTasks } from './jobs';
+import notifications from './api/notifications';
 
 // 创建Hono应用
 const app = new Hono<{ Bindings: Bindings }>();
 
 // 中间件，需要作为服务端接收所有来源客户端的请求
 app.use('*', logger());
-app.use('*', cors({
-  origin: (origin) => origin || '*',
-  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization'],
-  exposeHeaders: ['Content-Length', 'Content-Type'],
-  maxAge: 86400,
-  credentials: true,
-}));
+app.use('*', corsMiddleware);
 app.use('*', prettyJSON());
-
-// 在 Workers 环境中，您可能需要设置这些响应头
-app.use('*', async (c, next) => {
-  await next();
-  c.header('Access-Control-Allow-Origin', c.req.header('origin') || '*');
-  c.header('Access-Control-Allow-Credentials', 'true');
-});
+app.use('*', jwtMiddleware);
 
 // 公共路由
 app.get('/', (c) => c.json({ message: 'XUGOU API 服务正在运行' }));
@@ -79,6 +66,20 @@ export default {
       globalThis.isInitialized = true;
     }
 
+    // 如果是 OPTIONS 请求，直接处理
+    if (request.method === 'OPTIONS') {
+      console.log('Worker入口层面: 捕获到OPTIONS请求，直接返回');
+      return new Response(null, {
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, PATCH',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+          'Access-Control-Max-Age': '86400',
+        }
+      });
+    }
+
     try {
       // 如果数据库尚未初始化，则进行初始化检查
       if (!dbInitialized) {
@@ -95,12 +96,29 @@ export default {
       }
       
       // 处理请求
-      return app.fetch(request, env, ctx);
+      const response = await app.fetch(request, env, ctx);
+      
+      // 确保所有响应都有正确的CORS头
+      const newHeaders = new Headers(response.headers);
+      newHeaders.set('Access-Control-Allow-Origin', '*');
+      newHeaders.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+      
+      // 创建新的响应，保留原始状态和正文，但确保CORS头存在
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: newHeaders
+      });
     } catch (error) {
       console.error('请求处理错误:', error);
+      // 即使在错误响应中也添加CORS头
       return new Response(JSON.stringify({ error: '服务器内部错误' }), {
         status: 500,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, PATCH' 
+        }
       });
     }
   },

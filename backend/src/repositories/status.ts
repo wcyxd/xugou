@@ -49,7 +49,7 @@ export interface Agent {
   network_rx?: number;
   network_tx?: number;
   hostname?: string;
-  ip_address?: string;
+  ip_addresses?: string;
   os?: string;
   version?: string;
 }

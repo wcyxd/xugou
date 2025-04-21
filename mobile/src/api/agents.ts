@@ -6,7 +6,7 @@ export interface Agent {
   id: string | number;
   name: string;
   hostname?: string;
-  ip_address?: string;
+  ip_addresses?: string; // JSON 字符串，存储 IP 地址列表
   status: 'online' | 'offline' | 'unknown' | 'active';  // 添加'active'以兼容Dashboard
   lastSeen?: string;
   last_seen?: string;

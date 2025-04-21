@@ -16,57 +16,142 @@ import { RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import monitorService from '../../api/monitors';
 // 移除 react-native-chart-kit 依赖，使用自定义简单图表
+import SafeAreaWrapper from '../../components/SafeAreaWrapper';
 
-// 简单的自定义图表组件
-const SimpleLineChart: React.FC<{
-  data: number[];
-  labels: string[];
-  color: string;
+// 简化版心跳图组件 - 条形图样式
+const SimpleHeartbeatChart: React.FC<{
+  history: MonitorStatusHistory[];
   width: number;
   height: number;
-}> = ({ data, labels, color, width, height }) => {
-  // 找到数据的最大值和最小值，用于缩放
-  const maxValue = Math.max(...data);
-  const minValue = Math.min(...data);
-  const range = maxValue - minValue || 1; // 避免除以零
-
+}> = ({ history, width, height }) => {
+  // 获取状态颜色
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'up':
+        return '#3bd671'; // 鲜绿色
+      case 'down':
+        return '#eb5a46'; // 橙红色
+      case 'pending':
+        return '#f2d600'; // 黄色
+      default:
+        return '#b8b8b8'; // 灰色
+    }
+  };
+  
+  // 内部容器padding
+  const containerPadding = 16;
+  
+  // 计算有效显示区域宽度（减去内边距）
+  const contentWidth = width - (containerPadding * 2);
+  
+  // 固定条形宽度和间距
+  const barWidth = 10; // 每个条形固定宽度
+  const barGap = 3; // 条形之间的间隙
+  
+  // 根据容器宽度计算可以容纳的格子数量
+  const calculatedItemCount = Math.floor((contentWidth + barGap) / (barWidth + barGap));
+  
+  // 安全检查：确保至少显示1个格子
+  const fixedItemCount = Math.max(1, calculatedItemCount);
+  
+  // 重新计算实际条形宽度以便完全填满容器
+  const adjustedBarWidth = (contentWidth - (barGap * (fixedItemCount - 1))) / fixedItemCount;
+  
+  // 创建一个固定大小的数组
+  const placeholders = new Array(fixedItemCount).fill(null);
+  
+  // 获取最近的记录并反转顺序（最新的在最右边）
+  const recentHistory = [...history].slice(-fixedItemCount).reverse();
+  
+  // 用历史记录填充占位数组，没有记录的位置保持null
+  const displayItems = placeholders.map((_, index) => {
+    const historyIndex = index - (fixedItemCount - recentHistory.length);
+    return historyIndex >= 0 ? recentHistory[historyIndex] : null;
+  });
+  
+  // 设置统一的条形高度
+  const standardBarHeight = height * 0.65; // 条形高度为容器高度的65%
+  
   return (
-    <View style={{ width, height, marginVertical: 10 }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', height: height - 20 }}>
-        {data.map((value, index) => {
-          // 计算条形高度
-          const barHeight = ((value - minValue) / range) * (height - 40);
-          
-          return (
-            <View 
-              key={index} 
-              style={{ 
-                alignItems: 'center',
-                justifyContent: 'flex-end',
-                width: (width / data.length) - 4
-              }}
-            >
+    <View style={{ width, height: height + 10, marginVertical: 8 }}>
+      <View style={{ 
+        height: height,
+        backgroundColor: '#f9f9f9',
+        borderRadius: 8,
+        padding: containerPadding,
+        position: 'relative'
+      }}>
+        {/* 基线 */}
+        <View style={{
+          position: 'absolute',
+          left: containerPadding,
+          right: containerPadding,
+          bottom: containerPadding,
+          height: 1,
+          backgroundColor: '#e0e0e0'
+        }} />
+        
+        {/* 条形图容器 */}
+        <View style={{ 
+          width: contentWidth,
+          height: height - (containerPadding * 2) - 1, // 减去基线的高度
+          alignItems: 'flex-end', // 底部对齐
+          justifyContent: 'flex-start',
+          flexDirection: 'row'
+        }}>
+          {displayItems.map((item, index) => {
+            // 如果没有记录，显示一个浅色空白格子
+            if (item === null) {
+              return (
+                <View 
+                  key={`empty-${index}`} 
+                  style={{
+                    width: adjustedBarWidth,
+                    height: standardBarHeight,
+                    backgroundColor: '#f0f0f0', // 浅灰色背景
+                    borderWidth: 1,
+                    borderColor: '#e8e8e8', // 更浅的边框
+                    marginRight: index < fixedItemCount - 1 ? barGap : 0
+                  }}
+                />
+              );
+            }
+            
+            const color = getStatusColor(item.status);
+            
+            return (
               <View 
+                key={`bar-${item.id}-${index}`} 
                 style={{
+                  width: adjustedBarWidth,
+                  height: standardBarHeight,
                   backgroundColor: color,
-                  width: 8,
-                  height: Math.max(barHeight, 4),
-                  borderRadius: 4
+                  marginRight: index < fixedItemCount - 1 ? barGap : 0 // 最后一个不需要margin
                 }}
               />
-              {index % 4 === 0 && (
-                <Text style={{ fontSize: 10, marginTop: 4 }}>
-                  {labels[index]}
-                </Text>
-              )}
-            </View>
-          );
-        })}
+            );
+          })}
+        </View>
       </View>
-      <View style={{ alignItems: 'flex-end', marginTop: 4 }}>
-        <Text style={{ fontSize: 10, color: '#888' }}>
-          {minValue}-{maxValue} ms
-        </Text>
+      
+      {/* 图例 */}
+      <View style={{ 
+        flexDirection: 'row', 
+        justifyContent: 'center', 
+        marginTop: 6
+      }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16 }}>
+          <View style={{ width: 12, height: 6, backgroundColor: '#30c85e', marginRight: 6 }} />
+          <Text style={{ fontSize: 11, color: '#666' }}>正常</Text>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16 }}>
+          <View style={{ width: 12, height: 6, backgroundColor: '#f76363', marginRight: 6 }} />
+          <Text style={{ fontSize: 11, color: '#666' }}>故障</Text>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={{ width: 12, height: 6, backgroundColor: '#f0f0f0', borderWidth: 1, borderColor: '#e8e8e8', marginRight: 6 }} />
+          <Text style={{ fontSize: 11, color: '#999' }}>无数据</Text>
+        </View>
       </View>
     </View>
   );
@@ -135,8 +220,13 @@ const MonitorDetailScreen: React.FC = () => {
         response_time: item.response_time
       }));
       
+      // 对历史记录按时间戳倒序排列
+      const sortedHistory = formattedHistory.sort((a, b) => 
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+      
       setMonitor(monitorResult.monitor);
-      setHistory(formattedHistory);
+      setHistory(sortedHistory);
     } catch (error) {
       console.error('获取监控详情失败', error);
       Alert.alert(t('common.error', '错误'), t('monitors.fetchDetailFailed', '获取监控详情失败'));
@@ -210,8 +300,6 @@ const MonitorDetailScreen: React.FC = () => {
         return '#30c85e';
       case 'down':
         return '#f76363';
-      case 'pending':
-        return '#f4ca64';
       default:
         return '#aaaaaa';
     }
@@ -221,13 +309,11 @@ const MonitorDetailScreen: React.FC = () => {
   const getStatusText = (status: string) => {
     switch (status) {
       case 'up':
-        return t('monitors.status.up', '正常');
+        return t('monitors.statusDetails.up', '正常');
       case 'down':
-        return t('monitors.status.down', '故障');
-      case 'pending':
-        return t('monitors.status.pending', '待检');
+        return t('monitors.statusDetails.down', '故障');
       default:
-        return t('monitors.status.unknown', '未知');
+        return t('monitors.statusDetails.unknown', '未知');
     }
   };
   
@@ -258,187 +344,188 @@ const MonitorDetailScreen: React.FC = () => {
   
   if (loading && !refreshing) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#0066cc" />
-      </View>
+      <SafeAreaWrapper>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#0066cc" />
+        </View>
+      </SafeAreaWrapper>
     );
   }
   
   if (!monitor) {
     return (
-      <View style={styles.errorContainer}>
-        <Ionicons name="alert-circle-outline" size={60} color="#f76363" />
-        <Text style={styles.errorText}>
-          {t('monitors.notFound', '找不到监控信息')}
-        </Text>
-        <TouchableOpacity
-          style={styles.errorButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.errorButtonText}>{t('common.goBack', '返回')}</Text>
-        </TouchableOpacity>
-      </View>
+      <SafeAreaWrapper>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={60} color="#f76363" />
+          <Text style={styles.errorText}>
+            {t('monitors.monitorNotFound', '找不到监控信息')}
+          </Text>
+          <TouchableOpacity
+            style={styles.errorButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.errorButtonText}>{t('common.goBack', '返回')}</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaWrapper>
     );
   }
   
   return (
-    <ScrollView 
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      {/* 头部信息 */}
-      <View style={styles.header}>
-        <View style={styles.titleContainer}>
-          <View style={[styles.statusDot, { backgroundColor: getStatusColor(monitor.status) }]} />
-          <Text style={styles.title}>{monitor.name}</Text>
-        </View>
-        <Text style={[styles.statusBadge, { backgroundColor: getStatusColor(monitor.status) }]}>
-          {getStatusText(monitor.status)}
-        </Text>
-      </View>
-      
-      {/* 基本信息卡片 */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>{t('monitors.basicInfo', '基本信息')}</Text>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>{t('monitors.url', 'URL')}:</Text>
-          <Text style={styles.detailValue} numberOfLines={1}>{monitor.url}</Text>
-        </View>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>{t('monitors.type', '类型')}:</Text>
-          <Text style={styles.detailValue}>{monitor.type?.toUpperCase() || 'HTTP'}</Text>
-        </View>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>{t('monitors.method', '方法')}:</Text>
-          <Text style={styles.detailValue}>{monitor.method}</Text>
-        </View>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>{t('monitors.interval', '检查间隔')}:</Text>
-          <Text style={styles.detailValue}>{formatDuration(monitor.interval)}</Text>
-        </View>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>{t('monitors.timeout', '超时')}:</Text>
-          <Text style={styles.detailValue}>{monitor.timeout}s</Text>
-        </View>
-        <View style={styles.detailItem}>
-          <Text style={styles.detailLabel}>{t('monitors.created', '创建时间')}:</Text>
-          <Text style={styles.detailValue}>{formatDate(monitor.created_at)}</Text>
-        </View>
-      </View>
-      
-      {/* 状态卡片 */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>{t('monitors.status.title', '当前状态')}</Text>
-        <View style={styles.statusContainer}>
-          <View style={styles.statusItem}>
-            <Text style={styles.statusLabel}>{t('monitors.status.lastCheck', '最后检查')}</Text>
-            <Text style={styles.statusValue}>{formatDate(monitor.last_check || monitor.last_checked)}</Text>
+    <SafeAreaWrapper>
+      <ScrollView 
+        style={styles.container}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {/* 头部信息 */}
+        <View style={styles.header}>
+          <View style={styles.titleContainer}>
+            <View style={[styles.statusDot, { backgroundColor: getStatusColor(monitor.status) }]} />
+            <Text style={styles.title}>{monitor.name}</Text>
           </View>
-          <View style={styles.statusItem}>
-            <Text style={styles.statusLabel}>{t('monitors.status.uptime', '在线率')}</Text>
-            <Text style={styles.statusValue}>{monitor.uptime.toFixed(2)}%</Text>
-          </View>
-          <View style={styles.statusItem}>
-            <Text style={styles.statusLabel}>{t('monitors.status.responseTime', '响应时间')}</Text>
-            <Text style={styles.statusValue}>{monitor.response_time}ms</Text>
-          </View>
-          <View style={styles.statusItem}>
-            <Text style={styles.statusLabel}>{t('monitors.status.active', '活动状态')}</Text>
-            <Text style={[
-              styles.statusValue, 
-              { color: monitor.active ? '#30c85e' : '#f76363' }
-            ]}>
-              {monitor.active 
-                ? t('monitors.status.activeState', '活跃') 
-                : t('monitors.status.pausedState', '已暂停')}
-            </Text>
-          </View>
-        </View>
-      </View>
-      
-      {/* 响应时间图表 */}
-      {history.length > 0 && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t('monitors.charts.responseTime', '响应时间趋势')}</Text>
-          <SimpleLineChart
-            data={history.slice(-12).map(item => item.response_time || 0)}
-            labels={history.slice(-12).map(item => {
-              const date = new Date(item.timestamp);
-              return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
-            })}
-            color="#0066cc"
-            width={screenWidth}
-            height={220}
-          />
-        </View>
-      )}
-      
-      {/* 历史记录 */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>{t('monitors.history.title', '历史记录')}</Text>
-        <View style={styles.historyList}>
-          {history.length === 0 ? (
-            <Text style={styles.emptyText}>{t('monitors.history.empty', '暂无历史记录')}</Text>
-          ) : (
-            history.slice(0, 10).map((item, index) => (
-              <View key={item.id} style={styles.historyItem}>
-                <View style={[styles.historyStatus, { backgroundColor: getStatusColor(item.status) }]} />
-                <View style={styles.historyContent}>
-                  <Text style={styles.historyTime}>{formatDate(item.timestamp)}</Text>
-                  <Text style={styles.historyDetail}>
-                    {getStatusText(item.status)}
-                    {item.response_time && ` - ${item.response_time}ms`}
-                  </Text>
-                </View>
-              </View>
-            ))
-          )}
-          
-          {history.length > 10 && (
-            <TouchableOpacity 
-              style={styles.viewMoreButton}
-              onPress={() => navigation.navigate('MonitorHistory', { monitorId })}
-            >
-              <Text style={styles.viewMoreText}>
-                {t('monitors.history.viewMore', '查看更多历史')}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-      
-      {/* 操作按钮 */}
-      <View style={styles.actionsCard}>
-        <TouchableOpacity 
-          style={[styles.actionButton, styles.primaryButton]}
-          onPress={handleCheckNow}
-          disabled={checkingNow}
-        >
-          {checkingNow ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <>
-              <Ionicons name="refresh" size={18} color="#fff" />
-              <Text style={styles.actionButtonText}>
-                {t('monitors.actions.checkNow', '立即检查')}
-              </Text>
-            </>
-          )}
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.actionButton, styles.dangerButton]}
-          onPress={handleDelete}
-        >
-          <Ionicons name="trash-outline" size={18} color="#fff" />
-          <Text style={styles.actionButtonText}>
-            {t('common.delete', '删除')}
+          <Text style={[styles.statusBadge, { backgroundColor: getStatusColor(monitor.status) }]}>
+            {getStatusText(monitor.status)}
           </Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+        </View>
+        
+        {/* 基本信息卡片 */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t('monitors.basicInfo', '基本信息')}</Text>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>{t('monitors.url', 'URL')}:</Text>
+            <Text style={styles.detailValue} numberOfLines={1}>{monitor.url}</Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>{t('monitors.type', '类型')}:</Text>
+            <Text style={styles.detailValue}>{monitor.type?.toUpperCase() || 'HTTP'}</Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>{t('monitors.method', '方法')}:</Text>
+            <Text style={styles.detailValue}>{monitor.method}</Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>{t('monitors.interval', '检查间隔')}:</Text>
+            <Text style={styles.detailValue}>{formatDuration(monitor.interval)}</Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>{t('monitors.timeout', '超时')}:</Text>
+            <Text style={styles.detailValue}>{monitor.timeout}s</Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>{t('monitors.created', '创建时间')}:</Text>
+            <Text style={styles.detailValue}>{formatDate(monitor.created_at)}</Text>
+          </View>
+        </View>
+        
+        {/* 状态卡片 */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t('monitors.statusDetails.title', '当前状态')}</Text>
+          <View style={styles.statusContainer}>
+            <View style={styles.statusItem}>
+              <Text style={styles.statusLabel}>{t('monitors.statusDetails.lastCheck', '最后检查')}</Text>
+              <Text style={styles.statusValue}>{formatDate(monitor.last_check || monitor.last_checked)}</Text>
+            </View>
+            <View style={styles.statusItem}>
+              <Text style={styles.statusLabel}>{t('monitors.statusDetails.uptime', '在线率')}</Text>
+              <Text style={styles.statusValue}>{monitor.uptime.toFixed(2)}%</Text>
+            </View>
+            <View style={styles.statusItem}>
+              <Text style={styles.statusLabel}>{t('monitors.statusDetails.responseTime', '响应时间')}</Text>
+              <Text style={styles.statusValue}>{monitor.response_time}ms</Text>
+            </View>
+            <View style={styles.statusItem}>
+              <Text style={styles.statusLabel}>{t('monitors.statusDetails.active', '活动状态')}</Text>
+              <Text style={[
+                styles.statusValue, 
+                { color: monitor.active ? '#30c85e' : '#f76363' }
+              ]}>
+                {monitor.active 
+                  ? t('monitors.statusDetails.activeState', '活跃') 
+                  : t('monitors.statusDetails.pausedState', '已暂停')}
+              </Text>
+            </View>
+          </View>
+        </View>
+        
+        {/* 状态历史 */}
+        {history.length > 0 && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>{t('monitors.charts.statusHistory', '状态历史')}</Text>
+            <SimpleHeartbeatChart
+              history={history.slice(0, 60)}
+              width={screenWidth}
+              height={160}
+            />
+          </View>
+        )}
+        
+        {/* 历史记录 */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t('monitors.historyRecords.title', '历史记录')}</Text>
+          <View style={styles.historyList}>
+            {history.length === 0 ? (
+              <Text style={styles.emptyText}>{t('monitors.historyRecords.empty', '暂无历史记录')}</Text>
+            ) : (
+              history.slice(0, 5).map((item, index) => (
+                <View key={item.id} style={styles.historyItem}>
+                  <View style={[styles.historyStatus, { backgroundColor: getStatusColor(item.status) }]} />
+                  <View style={styles.historyContent}>
+                    <Text style={styles.historyTime}>{formatDate(item.timestamp)}</Text>
+                    <Text style={styles.historyDetail}>
+                      {getStatusText(item.status)}
+                      {item.response_time && ` - ${item.response_time}ms`}
+                    </Text>
+                  </View>
+                </View>
+              ))
+            )}
+            
+            {history.length > 5 && (
+              <TouchableOpacity 
+                style={styles.viewMoreButton}
+                onPress={() => navigation.navigate('MonitorHistory', { monitorId })}
+              >
+                <Text style={styles.viewMoreText}>
+                  {t('monitors.historyRecords.viewMore', '查看更多历史')}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+        
+        {/* 操作按钮 */}
+        <View style={styles.actionsCard}>
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.primaryButton]}
+            onPress={handleCheckNow}
+            disabled={checkingNow}
+          >
+            {checkingNow ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="refresh" size={18} color="#fff" />
+                <Text style={styles.actionButtonText}>
+                  {t('monitors.actions.checkNow', '立即检查')}
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.dangerButton]}
+            onPress={handleDelete}
+          >
+            <Ionicons name="trash-outline" size={18} color="#fff" />
+            <Text style={styles.actionButtonText}>
+              {t('common.delete', '删除')}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </SafeAreaWrapper>
   );
 };
 

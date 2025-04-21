@@ -1141,7 +1141,16 @@ const NotificationsConfig = () => {
                 <Flex justify="between" align="center">
                   <Box>
                     <Text weight="medium" style={{ marginRight: '4px' }}>{agent.name}</Text>
-                    <Text size="1" color="gray">{agent.ip_address}</Text>
+                    <Text size="1" color="gray">{(() => {
+                      try {
+                        const ipArray = JSON.parse(String(agent.ip_addresses || '[]'));
+                        return Array.isArray(ipArray) && ipArray.length > 0 
+                          ? ipArray.join(', ') 
+                          : String(agent.ip_addresses || '');
+                      } catch (e) {
+                        return String(agent.ip_addresses || '');
+                      }
+                    })()}</Text>
                   </Box>
                   <Flex align="center" gap="2">
                     <Text size="2">{t('notifications.specificSettings.override')}</Text>
